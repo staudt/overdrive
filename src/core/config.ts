@@ -163,13 +163,79 @@ export const config = {
     hitStop: 0.06,
   },
 
-  /** Owned by sim/dummies.ts. */
+  /** Owned by sim/dummies.ts. Drones come in waves ahead of the player. */
   dummies: {
-    count: 10,
     speed: 25,
     hp: 100,
     radius: 6,
-    respawnTime: 4,
+    /** First wave size; each wave adds waveGrowth, up to maxDummies alive. */
+    waveSize: 12,
+    waveGrowth: 4,
+    maxDummies: 48,
+    /** Next wave spawns when fewer than this fraction of the current wave is alive. */
+    nextWaveAt: 0.25,
+    /** Wave center distance ahead of the player, m, and drone scatter radius around it. */
+    waveDistMin: 700,
+    waveDistMax: 1300,
+    waveSpread: 260,
+    /** Drones beyond this distance from home steer back toward it. */
+    leash: 350,
+  },
+
+  /** Owned by sim/weapons.ts. Machine gun (LMB). */
+  gun: {
+    /** Rounds per second (alternating barrels). */
+    rate: 24,
+    /** Muzzle speed added to the ship's velocity, m/s. */
+    speed: 1100,
+    /** Random cone half-angle (inaccuracy). */
+    spread: 1.3 * DEG,
+    life: 1.0,
+    damage: 7,
+    /** Aim assist: within assistFull of the nose the rounds go exactly to the aim; fades out by assistMax. */
+    assistFull: 3 * DEG,
+    assistMax: 6 * DEG,
+    /** Barrel offsets in ship space (x is mirrored), m. */
+    muzzle: [1.1, -0.2, -6.5] as [number, number, number],
+  },
+
+  /** Owned by sim/weapons.ts. Missiles (hold E to stream). */
+  missiles: {
+    rackMax: 48,
+    /** Missiles per second while E is held. */
+    streamRate: 14,
+    /** Rack refill (only while E is released): delay after the last launch, then missiles per second. */
+    refillDelay: 0.8,
+    refillRate: 9,
+    /** Lock-on: cone half-angle around the aim, range, and max simultaneous locks. */
+    lockCone: 25 * DEG,
+    lockRange: 1800,
+    maxLocks: 8,
+    /** Launch kick (sideways/down, m/s) and free-fall time before the motor lights, s. */
+    ejectSpeed: 22,
+    dropTime: 0.14,
+    accel: 520,
+    maxSpeed: 480,
+    /** Homing turn rate, rad/s, and swarm wobble amplitude (rad/s). */
+    turnRate: 5,
+    wobble: 1.4,
+    life: 5,
+    /** Detonates within this distance of its target (plus the target radius), m. */
+    proximity: 4,
+    blastRadius: 16,
+    damage: 110,
+    /** Pylon offsets in ship space (x mirrored), m. */
+    pylon: [3.4, -0.6, 1.0] as [number, number, number],
+  },
+
+  /** Owned by sim/combat.ts. */
+  score: {
+    /** Hits within this window keep the chain alive, s. */
+    chainWindow: 2.0,
+    hitPoints: 10,
+    killPoints: 1000,
+    /** Extra kill points per chain step. */
+    killPerChain: 100,
   },
 
   /** Owned by sim/terrainGen.ts. */

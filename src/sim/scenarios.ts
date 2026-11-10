@@ -29,7 +29,7 @@ export const scenarios: Record<string, (t: Terrain) => Scenario> = {
   'stall-test': () => ({ world: { shipPos: new Vector3(0, 300, 600), shipYaw: 0 }, hold: { brake: true } }),
   'dive-test': () => ({ world: { shipPos: new Vector3(0, 90, 600), shipYaw: 0, shipPitch: -0.7, shipSpeed: 90 } }),
   dummies: () => ({
-    world: { shipPos: new Vector3(0, 140, 700), shipYaw: 0, dummyCount: 16, dummyCenter: new Vector3(0, 0, 0) },
+    world: { shipPos: new Vector3(0, 140, 700), shipYaw: 0, waves: true },
   }),
 };
 
