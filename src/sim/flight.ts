@@ -51,11 +51,12 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     boostDelay: 0,
     stalled: false,
     stallTimer: 0,
+    holdTimer: 0,
     depth: -pos.y,
     submerged: false,
     diveSpeed: 0,
     diveAngle: 0,
-    diveAccel: config.water.riseAccel,
+    diveAccel: 0,
     diveAim: quat.clone(),
     skimming: false,
     bounceTimer: 0,
@@ -112,10 +113,11 @@ function stepBoost(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]
   if (s.boostLockout && s.boostMeter >= b.minToStart) s.boostLockout = false;
 }
 
-function stepStall(s: ShipState, dt: number, events: SimEvent[]): void {
+function stepStall(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]): void {
   const f = config.flight;
   if (s.submerged || s.bounceTimer > 0) {
     s.stallTimer = 0;
+    s.holdTimer = 0;
     if (s.stalled) {
       s.stalled = false;
       events.push({ type: 'stallEnd' });
@@ -124,7 +126,11 @@ function stepStall(s: ShipState, dt: number, events: SimEvent[]): void {
   }
   if (s.speed < f.stallSpeed) s.stallTimer += dt;
   else s.stallTimer = 0;
-  if (!s.stalled && s.stallTimer > f.stallTime) {
+  // S held at a stop: hang on the airbrakes first, then fall.
+  if (!s.stalled && inp.brake && s.speed < f.stallSpeed) s.holdTimer += dt;
+  else s.holdTimer = 0;
+  const limit = inp.brake ? f.brakeHoldTime : f.stallTime;
+  if (!s.stalled && (inp.brake ? s.holdTimer : s.stallTimer) > limit) {
     s.stalled = true;
     events.push({ type: 'stallStart' });
   } else if (s.stalled && s.vel.dot(forwardOf(s.quat, _dir)) > f.stallRecoverSpeed) {
@@ -246,9 +252,14 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
     _dir.lerp(_f, ease(grip, dt)).normalize();
     s.vel.copy(_dir).multiplyScalar(ns);
 
-    // Gravity only bites when slow.
-    const g = Math.max(0, 1 - ns / f.liftSpeed);
-    s.vel.y -= f.gravity * g * dt;
+    if (s.holdTimer > 0) {
+      // Hanging on the airbrakes: bleed the last motion, no gravity yet.
+      s.vel.multiplyScalar(Math.exp(-f.brakeHoldDamp * dt));
+    } else {
+      // Gravity only bites when slow.
+      const g = Math.max(0, 1 - ns / f.liftSpeed);
+      s.vel.y -= f.gravity * g * dt;
+    }
   }
 }
 
@@ -281,7 +292,7 @@ export function stepFlight(s: ShipState, inp: InputFrame, dt: number, events: Si
 
   s.speed = s.vel.length();
   stepBoost(s, inp, dt, events);
-  stepStall(s, dt, events);
+  stepStall(s, inp, dt, events);
   s.throttleState = s.boosting ? 2 : inp.brake ? -1 : inp.throttle ? 1 : 0;
   stepAttitude(s, dt);
   stepVelocity(s, inp, dt);

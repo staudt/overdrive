@@ -22,10 +22,15 @@ describe('stall', () => {
 
   it('holding S stops the ship fast, then it free-falls with full steering and a level nose', () => {
     const w = new World(flatSea(), { shipPos: v(0, 600, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 110 });
-    run(w, 0.8, { brake: true });
-    expect(w.ship.speed).toBeLessThan(25); // 110 → near stop in under a second
     run(w, 0.6, { brake: true });
-    expect(w.ship.stalled).toBe(true);
+    expect(w.ship.speed).toBeLessThan(10); // 110 → near stop in about half a second
+    const y0 = w.ship.pos.y;
+    run(w, 0.6, { brake: true });
+    expect(w.ship.stalled).toBe(false); // hanging on the airbrakes
+    expect(w.ship.speed).toBeLessThan(1.5);
+    expect(Math.abs(w.ship.pos.y - y0)).toBeLessThan(1.5);
+    run(w, 0.6, { brake: true });
+    expect(w.ship.stalled).toBe(true); // then the free fall
     // Turn 90° while falling: the nose follows the aim, and is not forced down.
     const vy0 = w.ship.vel.y;
     run(w, 1.2, () => (setAim(w.ship, Math.PI / 2, 0), { brake: true }));
@@ -85,12 +90,12 @@ describe('dive mirror bounce', () => {
     let exit: { speed: number; angle: number } | null = null;
     let maxDepth = 0;
     let under = 0;
-    run(w, 4, {}, () => {
+    run(w, 5, {}, () => {
       maxDepth = Math.max(maxDepth, w.ship.depth);
       if (w.ship.submerged) under += 1 / 120;
       for (const e of w.drainEvents()) {
         const sp = w.ship.vel.length();
-        if (e.type === 'waterEnter' && !enter) enter = { speed: sp, angle: Math.asin(-w.ship.vel.y / sp) };
+        if (e.type === 'waterEnter' && !enter) enter = { speed: w.ship.diveSpeed, angle: w.ship.diveAngle };
         if (e.type === 'waterExit' && !exit) exit = { speed: sp, angle: Math.asin(w.ship.vel.y / sp) };
       }
     });
@@ -125,10 +130,15 @@ describe('dive mirror bounce', () => {
     expect(w.ship.pos.y).toBeGreaterThan(40);
   });
 
-  it('a boosted vertical dive stays above maxDepth and comes back up', () => {
-    const { exit, maxDepth } = dive(85, 300);
-    expect(exit).toBeTruthy();
-    expect(maxDepth).toBeLessThan(config.water.maxDepth + 5);
+  it('a boosted vertical dive stays above maxDepth, comes back up, and is the longest dive', () => {
+    const fast = dive(85, 300);
+    const mid = dive(45, 100);
+    const shallow = dive(30, 300);
+    expect(fast.exit).toBeTruthy();
+    expect(fast.maxDepth).toBeLessThan(config.water.maxDepth + 1);
+    expect(fast.under).toBeGreaterThan(mid.under);
+    expect(fast.under).toBeGreaterThan(shallow.under);
+    expect(fast.maxDepth).toBeGreaterThan(mid.maxDepth);
   });
 
   it('a shallow contact skims the surface instead of diving', () => {

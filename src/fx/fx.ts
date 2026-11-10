@@ -102,9 +102,7 @@ export class Fx {
   private flames: Flame[] | null = null;
   private boosterFlames: Flame[] | null = null;
   private boosterLen = 0;
-  private readonly wingRibbons: Ribbon[];
   private readonly burnRibbons: Ribbon[];
-  private contrail = 0;
   private flameLen = [0, 0];
   private flameI = [1, 1];
   private readonly acc = new Float32Array(24);
@@ -145,8 +143,6 @@ export class Fx {
       scene.add(mesh);
       this.rings.push({ mesh, mat, age: 0, life: 1, maxR: 1, facing: false, active: false });
     }
-    const n = Math.ceil(config.fx.contrailSeconds / 0.02);
-    this.wingRibbons = [0, 1].map(() => new Ribbon(scene, n, 0.02, 0.55, 3.5, new Color(1, 1, 1), false));
     this.burnRibbons = [0, 1].map(() => new Ribbon(scene, 26, 0.02, 0.45, 0.6, new Color(3, 0.6, 2.4), true));
     this.demo = new URLSearchParams(window.location.search).has('fxdemo');
   }
@@ -404,14 +400,6 @@ export class Fx {
       br.update(dt, this.p.x, this.p.y, this.p.z, ts === 2 ? 0.7 : ts === 1 ? 0.25 : 0, cam);
     }
 
-    // Wingtip contrails: strong when turning hard or boosting.
-    const bankA = Math.abs(s.bank);
-    const target = Math.max(smooth(0.9, 1.7, s.turnRate), smooth(0.6, 1.2, bankA) * 0.7, ts === 2 ? 1 : 0, smooth(config.flight.maxSpeed, config.flight.maxSpeed + 30, sp) * 0.6);
-    this.contrail += (target - this.contrail) * Math.min(1, dt * (target > this.contrail ? 8 : 2.5));
-    for (let i = 0; i < ship.wingtips.length; i++) {
-      ship.wingtips[i]!.getWorldPosition(this.p);
-      this.wingRibbons[i]!.update(dt, this.p.x, this.p.y, this.p.z, this.contrail * 0.85, cam);
-    }
   }
 
   private skimAndWater(dt: number, world: World, s: ShipState): void {

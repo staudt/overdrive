@@ -17,8 +17,8 @@ export const config = {
 
   /** Owned by sim/flight.ts. */
   flight: {
-    /** Brake target speed (S held): near a full stop. */
-    minSpeed: 2,
+    /** Brake target speed (S held): a full stop. */
+    minSpeed: 0,
     cruiseSpeed: 70,
     maxSpeed: 110,
     boostSpeed: 300,
@@ -28,7 +28,11 @@ export const config = {
     /** Easing back to cruise when W/boost released. */
     settleAccel: 25,
     /** Airbrakes: S decelerates this hard, m/s². */
-    brakeDecel: 170,
+    brakeDecel: 260,
+    /** Once stopped with S held, the ship hangs in place this long before free-falling, s. */
+    brakeHoldTime: 1.0,
+    /** How hard the hold bleeds the last bit of motion, 1/s. */
+    brakeHoldDamp: 6,
     /** Diving speeds you up, climbing slows you (fraction of gravity along the nose). */
     slopeGain: 0.5,
     gravity: 18,
@@ -93,14 +97,19 @@ export const config = {
   /** Owned by sim/water.ts + sim/waves.ts (render/ocean.ts must use the same wave params). */
   water: {
     /**
-     * Dive: entering steeper than minDiveAngle goes under; a constant upward push (riseAccel)
-     * turns you around and you exit at the mirrored angle with exitSpeedMul * entry speed.
-     * Depth = vy²/(2a) and time under = 2·vy/a, so steeper/faster dives go deeper and stay
-     * down longer. The push is raised just enough to keep depth <= maxDepth.
+     * Dive: entering steeper than minDiveAngle goes under, follows a parabola down and back
+     * up, and exits at the mirrored angle with exitSpeedMul * entry speed. Both depth and time
+     * under grow with the entry vertical speed vy (steeper or faster = deeper and longer):
+     *   depth = clamp(vy * depthPerMps, minDepth, maxDepth)
+     *   time  = clamp(timeBase + vy * timePerMps, timeBase, timeMax)
      */
     minDiveAngle: 25 * DEG,
-    riseAccel: 100,
-    maxDepth: 50,
+    depthPerMps: 0.35,
+    minDepth: 6,
+    maxDepth: 45,
+    timeBase: 0.55,
+    timePerMps: 0.008,
+    timeMax: 2.6,
     /** Horizontal velocity drag underwater, 1/s. */
     drag: 0.8,
     exitSpeedMul: 1.0,
@@ -211,8 +220,6 @@ export const config = {
     particleBudget: 20000,
     /** Share of the budget used by the additive (glow/spark) buffer; the rest is alpha (smoke/water). */
     additiveFraction: 0.5,
-    /** Wingtip contrail length, seconds. */
-    contrailSeconds: 1.5,
     /** Global multiplier on spawn counts for events and trails. */
     density: 1,
     /** Multiplier on engine flame + nozzle glow brightness (bloom amplifies it). */

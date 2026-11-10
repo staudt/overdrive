@@ -285,18 +285,29 @@ export function createShipModel(): ShipModel {
   };
   const elevons = [elevon(-1), elevon(1)];
 
-  // Airbrakes: red panels on the spine, hinged at the front, flip up while braking (S).
+  // Airbrakes (S): big red spine panels plus wing spoilers, hinged at the front, flip up hard.
   const airbrakeGeo = slab(
     [
       [0.15, 0],
-      [1.05, 0],
-      [0.95, 1.9],
-      [0.15, 1.9],
+      [1.35, 0],
+      [1.2, 2.7],
+      [0.15, 2.7],
+    ],
+    0.1,
+    0,
+  );
+  const airbrakes = [-1, 1].map((sx) => animated(sx < 0 ? mirrorX(airbrakeGeo) : airbrakeGeo, red, 0, 0.82, 2.0));
+  const spoilerGeo = slab(
+    [
+      [0, 0],
+      [4.4, 0],
+      [4.4, 1.1],
+      [0, 1.4],
     ],
     0.08,
     0,
   );
-  const airbrakes = [-1, 1].map((sx) => animated(sx < 0 ? mirrorX(airbrakeGeo) : airbrakeGeo, red, 0, 0.82, 2.4));
+  const spoilers = [-1, 1].map((sx) => animated(sx < 0 ? mirrorX(spoilerGeo) : spoilerGeo, white, sx * 2.7, 0.06, 2.5));
   let brake = 0;
 
   // Canards.
@@ -430,10 +441,15 @@ export function createShipModel(): ShipModel {
       tails[1]!.rotation.y = yawCue;
 
       brake += ((s.throttleState === -1 ? 1 : 0) - brake) * Math.min(1, dt * 12);
-      airbrakes[0]!.rotation.set(-1.1 * brake, 0, 0.35 * brake);
-      airbrakes[1]!.rotation.set(-1.1 * brake, 0, -0.35 * brake);
-      elevons[0]!.rotation.x += -0.5 * brake;
-      elevons[1]!.rotation.x += -0.5 * brake;
+      airbrakes[0]!.rotation.set(-1.35 * brake, 0, 0.45 * brake);
+      airbrakes[1]!.rotation.set(-1.35 * brake, 0, -0.45 * brake);
+      spoilers[0]!.rotation.x = -1.3 * brake;
+      spoilers[1]!.rotation.x = -1.3 * brake;
+      for (const sp of spoilers) sp.visible = brake > 0.02;
+      elevons[0]!.rotation.x += -0.95 * brake;
+      elevons[1]!.rotation.x += -0.95 * brake;
+      canards[0]!.rotation.x += 0.8 * brake;
+      canards[1]!.rotation.x += 0.8 * brake;
     },
   };
 }

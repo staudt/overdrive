@@ -43,9 +43,13 @@ export function stepWater(s: ShipState, dt: number, t: number, events: SimEvent[
       s.submerged = true;
       s.diveSpeed = speed;
       s.diveAngle = Math.max(w.minDiveAngle, angle);
+      // Depth and time under both grow with the entry vertical speed; the water absorbs the
+      // rest of the plunge, then a constant push brings the ship back up (a parabola).
       const vy = Math.max(1, -s.vel.y, Math.sin(angle) * speed);
-      if (s.vel.y > -vy) s.vel.y = -vy; // breaking through from a skim: go in at the nose angle
-      s.diveAccel = Math.max(w.riseAccel, (vy * vy) / (2 * w.maxDepth));
+      const depth = Math.min(w.maxDepth, Math.max(w.minDepth, vy * w.depthPerMps));
+      const time = Math.min(w.timeMax, w.timeBase + vy * w.timePerMps);
+      s.vel.y = (-4 * depth) / time;
+      s.diveAccel = (8 * depth) / (time * time);
       // Aim target: same heading, mirrored pitch.
       _h.copy(s.vel).setY(0);
       if (_h.lengthSq() < 1e-6) _h.copy(_f).setY(0);

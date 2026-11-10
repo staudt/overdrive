@@ -56,10 +56,13 @@ export interface ShipState {
   boostDelay: number;
   stalled: boolean;
   stallTimer: number;
+  /** Seconds spent hanging in place on the airbrakes (S held, stopped); free fall after brakeHoldTime. */
+  holdTimer: number;
   /** Depth below the wave surface (positive = underwater). */
   depth: number;
   submerged: boolean;
   /** Dive bookkeeping: speed and angle (rad below horizontal) at entry, upward push used (m/s²). */
+  /** (diveAccel = 8·depth/time², chosen at entry so depth and time follow config.water.) */
   diveSpeed: number;
   diveAngle: number;
   diveAccel: number;
