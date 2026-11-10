@@ -90,6 +90,14 @@ export function maxTurnRate(speed: number): number {
 
 const ease = (rate: number, dt: number) => 1 - Math.exp(-rate * dt);
 
+/** Turn-rate cap for a speed and throttle state (-1 brake, 0 coast, 1 W, 2 boost). */
+export function turnCap(speed: number, throttleState: -1 | 0 | 1 | 2): number {
+  const f = config.flight;
+  const mul =
+    throttleState === 2 ? f.turnMulBoost : throttleState === -1 ? f.turnMulBrake : throttleState === 1 ? f.turnMulThrottle : f.turnMulCruise;
+  return maxTurnRate(speed) * mul;
+}
+
 function stepBoost(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]): void {
   const b = config.boost;
   const want = inp.boost && !s.boostLockout && s.boostMeter > 0 && !s.submerged;
@@ -157,7 +165,7 @@ function stepAttitude(s: ShipState, dt: number): void {
   forwardOf(s.quat, _f);
   forwardOf(s.aim, _d);
 
-  let cap = maxTurnRate(s.speed) * auth;
+  let cap = turnCap(s.speed, s.throttleState) * auth;
   if (s.breakTurn !== 0) cap *= f.breakTurnMult;
   if (s.bounceTimer > 0 && s.speed > 1) {
     // Just bounced off terrain: follow the rebound so the nose can't dig back in.

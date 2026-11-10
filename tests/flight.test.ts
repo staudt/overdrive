@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { config } from '../src/core/config';
-import { setAim } from '../src/sim/flight';
+import { setAim, turnCap } from '../src/sim/flight';
 import { World } from '../src/sim/world';
 import { flatSea, fnTerrain, run, v } from './helpers';
 
@@ -237,6 +237,31 @@ describe('turning', () => {
     const boost = radius({ boost: true }, 1.2, 0.4);
     expect(brake).toBeLessThan(cruise);
     expect(cruise).toBeLessThan(boost);
+  });
+
+  it('turn cap by throttle state: brake > coast > W > boost at the same speed', () => {
+    const sp = 90;
+    expect(turnCap(sp, -1)).toBeGreaterThan(turnCap(sp, 0));
+    expect(turnCap(sp, 0)).toBeGreaterThan(turnCap(sp, 1));
+    expect(turnCap(sp, 1)).toBeGreaterThan(turnCap(sp, 2));
+  });
+
+  it('the nose tracks a steadily moving aim within the gun assist cone', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 400, 0), shipYaw: 0, dummyCount: 0 });
+    let yaw = 0;
+    let maxErr = 0;
+    // Aim sweeps at 60°/s (a brisk mouse pan); measure after the nose has caught up.
+    run(w, 3, () => {
+      yaw += (60 * Math.PI) / 180 / 120;
+      setAim(w.ship, yaw, 0);
+      return {};
+    }, (t) => {
+      if (t < 1) return;
+      const nose = v(0, 0, -1).applyQuaternion(w.ship.quat);
+      const aim = v(0, 0, -1).applyQuaternion(w.ship.aim);
+      maxErr = Math.max(maxErr, nose.angleTo(aim));
+    });
+    expect(maxErr).toBeLessThan(config.gun.assistMax);
   });
 
   it('A/D break turn snaps to a hard bank', () => {

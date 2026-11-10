@@ -67,6 +67,14 @@ export class GameAudio {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyM' && !e.repeat) this.toggleMute();
     });
+    // Silence everything while the app is in the background; pick back up on return.
+    const away = () => void this.ctx?.suspend().catch(() => undefined);
+    const back = () => {
+      if (this.started && this.ctx && !document.hidden && document.hasFocus()) void this.ctx.resume().catch(() => undefined);
+    };
+    window.addEventListener('blur', away);
+    window.addEventListener('focus', back);
+    document.addEventListener('visibilitychange', () => (document.hidden ? away() : back()));
     try {
       const AC: typeof AudioContext | undefined =
         window.AudioContext ??

@@ -45,15 +45,23 @@ export const config = {
     bestTurnSpeed: 55,
     turnRateAtMax: 1.8,
     turnRateAtBoost: 1.1,
-    /** Proportional gain from aim error angle to desired turn rate, 1/s. */
-    turnGain: 7,
+    /**
+     * Turn-rate multiplier by throttle state (on top of the speed curve): coasting turns
+     * tighter than throttling, braking tightest, boosting widest.
+     */
+    turnMulCruise: 1.5,
+    turnMulThrottle: 1.0,
+    turnMulBrake: 2.2,
+    turnMulBoost: 0.6,
+    /** Proportional gain from aim error angle to desired turn rate, 1/s (higher = nose tracks the aim tighter). */
+    turnGain: 13,
     /** First-order response of actual turn rate to desired, 1/s. */
-    turnResponse: 14,
+    turnResponse: 22,
 
     /** Bank angle per rad/s of yaw rate, and its clamp. */
     bankGain: 0.55,
     maxAutoBank: 75 * DEG,
-    bankResponse: 9,
+    bankResponse: 12,
 
     /** A/D break turn. */
     breakYawRate: 2.3,
@@ -193,8 +201,8 @@ export const config = {
     life: 1.3,
     damage: 7,
     /** Aim assist: within assistFull of the nose the rounds go exactly to the aim; fades out by assistMax. */
-    assistFull: 3 * DEG,
-    assistMax: 6 * DEG,
+    assistFull: 4 * DEG,
+    assistMax: 8 * DEG,
     /** Barrel offsets in ship space (x is mirrored), m. */
     muzzle: [1.1, -0.2, -6.5] as [number, number, number],
   },
