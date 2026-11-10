@@ -43,6 +43,17 @@ export class GameAudio {
   private tearFilter!: BiquadFilterNode;
   private spray!: GainNode;
 
+  private busGun!: GainNode;
+  private busMissile!: GainNode;
+  private rumble!: GainNode;
+  private lastGun = -10;
+  private lastLaunch = -10;
+  private lastBoom = -10;
+  private lastHit = -10;
+  private readonly gunVoices: number[] = [];
+  private readonly launchVoices: number[] = [];
+  private readonly boomVoices: number[] = [];
+  private readonly shipPos = { x: 0, y: 0, z: 0 };
   private prevThrottle = 0;
   private bubbleT = 0;
 
@@ -146,6 +157,15 @@ export class GameAudio {
     this.busBoost = this.mkGain(ctx, config.audio.boost, this.bus);
     this.busSfx = this.mkGain(ctx, config.audio.sfx, this.bus);
     this.busWater = this.mkGain(ctx, config.audio.water, this.bus);
+    this.busGun = this.mkGain(ctx, 1, this.bus);
+    this.busMissile = this.mkGain(ctx, 1, this.bus);
+
+    // Gun mechanical rumble: lowpassed noise, gated by recent gunFire events.
+    const rSrc = this.noiseSrc(ctx);
+    const rLp = this.mkFilter(ctx, 'lowpass', 220, 1.5);
+    this.rumble = this.mkGain(ctx, 0, this.busGun);
+    rSrc.connect(rLp).connect(this.rumble);
+    rSrc.start();
 
     // Engine roar: lowpassed noise.
     const roarSrc = this.noiseSrc(ctx);
@@ -231,6 +251,10 @@ export class GameAudio {
     const a = config.audio;
     const bs = config.flight.boostSpeed;
     const tc = 0.08;
+    this.shipPos.x = s.pos.x;
+    this.shipPos.y = s.pos.y;
+    this.shipPos.z = s.pos.z;
+    this.rumble.gain.setTargetAtTime(t - this.lastGun < 0.12 ? a.gun * 0.9 : 0, t, 0.04);
 
     this.master.gain.setTargetAtTime(this.muted ? 0 : a.master, t, 0.05);
     this.busEngine.gain.setTargetAtTime(a.engine, t, 0.1);
@@ -315,13 +339,23 @@ export class GameAudio {
         }
         this.noiseBurst(this.busSfx, 'bandpass', 4000, 1.5, 0.7 * k, 0.001, 0.12);
         this.tone(this.busSfx, 'sine', 90, 40, 0.8 * k, 0.25, 3);
-        if (e.killed) {
-          this.noiseBurst(this.busSfx, 'lowpass', 5000, 0.8, 1, 0.005, 1.6, 80, 2);
-          this.noiseBurst(this.busSfx, 'bandpass', 1500, 0.5, 0.6, 0.002, 0.5, 300);
-          this.tone(this.busSfx, 'sine', 90, 22, 1.4, 1.6, 2);
-        }
         break;
       }
+      case 'kill':
+        this.explosion(1);
+        break;
+      case 'gunFire':
+        this.gunShot();
+        break;
+      case 'missileLaunch':
+        this.launchWhoosh();
+        break;
+      case 'missileExplode':
+        this.missileBoom(e.pos, e.surface);
+        break;
+      case 'hit':
+        this.hitTick(e.by);
+        break;
       case 'stallStart':
         for (let i = 0; i < 4; i++)
           this.noiseBurst(this.busEngine, 'lowpass', 600 - i * 100, 1, 0.5, 0.002, 0.06, 120, 3);
@@ -341,6 +375,65 @@ export class GameAudio {
       default:
         break;
     }
+  }
+
+  /** Big drone explosion (also scaled down for missile booms). */
+  private explosion(k: number): void {
+    this.noiseBurst(this.busSfx, 'lowpass', 5000, 0.8, k, 0.005, 1.6, 80, 2);
+    this.noiseBurst(this.busSfx, 'bandpass', 1500, 0.5, 0.6 * k, 0.002, 0.5, 300);
+    this.tone(this.busSfx, 'sine', 90, 22, 1.4 * k, 1.6, 2);
+  }
+
+  private voiceFree(list: number[], cap: number, now: number): boolean {
+    while (list.length && list[0]! < now) list.shift();
+    return list.length < cap;
+  }
+
+  private gunShot(): void {
+    const t = this.ctx!.currentTime;
+    this.lastGun = t;
+    if (!this.voiceFree(this.gunVoices, 6, t)) return;
+    this.gunVoices.push(t + 0.07);
+    const v = config.audio.gun;
+    this.noiseBurst(this.busGun, 'bandpass', 2400 + Math.random() * 1200, 0.9, v, 0.001, 0.045, 900, 2);
+    this.tone(this.busGun, 'square', 220 + Math.random() * 40, 70, v * 0.5, 0.04, 2);
+    this.tone(this.busGun, 'sine', 120, 45, v * 0.7, 0.06);
+  }
+
+  private launchWhoosh(): void {
+    const t = this.ctx!.currentTime;
+    if (t - this.lastLaunch < 0.04 || !this.voiceFree(this.launchVoices, 8, t)) return;
+    this.lastLaunch = t;
+    this.launchVoices.push(t + 0.35);
+    const f = 900 + Math.random() * 1400;
+    this.noiseBurst(this.busMissile, 'bandpass', f, 1.2, config.audio.missile * (0.6 + Math.random() * 0.4), 0.015, 0.28, f * 3);
+    this.tone(this.busMissile, 'sawtooth', 160 + Math.random() * 80, 500 + Math.random() * 300, 0.05, 0.2);
+  }
+
+  private missileBoom(pos: { x: number; y: number; z: number }, surface: string): void {
+    const t = this.ctx!.currentTime;
+    const dx = pos.x - this.shipPos.x;
+    const dy = pos.y - this.shipPos.y;
+    const dz = pos.z - this.shipPos.z;
+    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const vol = 1 / (1 + (d / 140) * (d / 140));
+    if (vol < 0.03 || t - this.lastBoom < 0.03 || !this.voiceFree(this.boomVoices, 8, t)) return;
+    this.lastBoom = t;
+    this.boomVoices.push(t + 0.7);
+    const k = vol * 0.8 * config.audio.explosion;
+    const lp = 400 + 3500 * vol;
+    this.noiseBurst(this.busSfx, 'lowpass', lp, 0.8, k, 0.004, 0.7, 120, 2);
+    this.tone(this.busSfx, 'sine', 100 + Math.random() * 30, 28, k * 1.2, 0.6, 2);
+    if (surface === 'water') this.noiseBurst(this.busWater, 'highpass', 3000, 0.5, k * 0.5, 0.03, 0.6);
+  }
+
+  private hitTick(by: string): void {
+    const t = this.ctx!.currentTime;
+    if (t - this.lastHit < 0.035) return;
+    this.lastHit = t;
+    const f = 1500 + Math.random() * 900;
+    this.tone(this.busSfx, 'triangle', f, f * 0.6, by === 'gun' ? 0.14 : 0.25, 0.07);
+    this.noiseBurst(this.busSfx, 'bandpass', 4500, 2, 0.1, 0.001, 0.02);
   }
 
   private brakeWhump(): void {
