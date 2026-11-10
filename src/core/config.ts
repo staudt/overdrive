@@ -174,6 +174,12 @@ export const config = {
   /** Owned by render/ship + fx/*. Agents may add fields. */
   fx: {
     particleBudget: 20000,
+    /** Share of the budget used by the additive (glow/spark) buffer; the rest is alpha (smoke/water). */
+    additiveFraction: 0.5,
+    /** Wingtip contrail length, seconds. */
+    contrailSeconds: 1.5,
+    /** Global multiplier on spawn counts for events and trails. */
+    density: 1,
   },
 };
 
