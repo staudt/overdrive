@@ -329,6 +329,8 @@ export const config = {
     water: 1,
     /** Weapons: gun, missile launch whoosh, explosions/hits. */
     gun: 0.5,
+    /** Gun reverb/space send (0 = dry). */
+    gunReverb: 0.55,
     missile: 0.6,
     explosion: 1,
   },

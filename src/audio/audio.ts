@@ -46,6 +46,7 @@ export class GameAudio {
   private spray!: GainNode;
 
   private busGun!: GainNode;
+  private gunVerbIn!: GainNode;
   private busMissile!: GainNode;
   private rumble!: GainNode;
   private lastGun = -10;
@@ -132,6 +133,23 @@ export class GameAudio {
     return buf;
   }
 
+  /** Generated reverb impulse: decaying noise, low-passed more as it decays (dark tail). */
+  private mkVerb(ctx: BaseAudioContext, seconds: number, decay: number): AudioBuffer {
+    const len = Math.floor(ctx.sampleRate * seconds);
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / ctx.sampleRate;
+        const k = 0.5 * Math.exp(-t * 6); // one-pole coefficient shrinks: darker over time
+        lp += (Math.random() * 2 - 1 - lp) * (0.05 + k);
+        d[i] = lp * Math.exp(-t / decay);
+      }
+    }
+    return buf;
+  }
+
   private noiseSrc(ctx: AudioContext): AudioBufferSourceNode {
     const n = ctx.createBufferSource();
     n.buffer = this.noise;
@@ -181,6 +199,21 @@ export class GameAudio {
     this.busSfx = this.mkGain(ctx, config.audio.sfx, this.bus);
     this.busWater = this.mkGain(ctx, config.audio.water, this.bus);
     this.busGun = this.mkGain(ctx, 1, this.bus);
+    // Gun space: a dark generated reverb plus a low slapback echo, so shots bloom instead of
+    // sounding dry. Both are sends from the gun bus.
+    const verb = ctx.createConvolver();
+    verb.buffer = this.mkVerb(ctx, 0.9, 0.22);
+    this.gunVerbIn = this.mkGain(ctx, config.audio.gunReverb, verb);
+    this.busGun.connect(this.gunVerbIn);
+    verb.connect(this.mkFilter(ctx, 'lowpass', 2200, 0.5)).connect(this.bus);
+    const slap = ctx.createDelay(0.5);
+    slap.delayTime.value = 0.13;
+    const slapFb = this.mkGain(ctx, 0.28, slap);
+    const slapLp = this.mkFilter(ctx, 'lowpass', 900, 0.5);
+    this.busGun.connect(this.mkGain(ctx, 0.35, slap));
+    slap.connect(slapLp);
+    slapLp.connect(slapFb);
+    slapLp.connect(this.bus);
     this.busMissile = this.mkGain(ctx, 1, this.bus);
 
     // Gun mechanical rumble: lowpassed noise, gated by recent gunFire events.
@@ -281,6 +314,7 @@ export class GameAudio {
     this.shipPos.y = s.pos.y;
     this.shipPos.z = s.pos.z;
     this.rumble.gain.setTargetAtTime(t - this.lastGun < 0.12 ? a.gun * 0.9 : 0, t, 0.04);
+    this.gunVerbIn.gain.setTargetAtTime(a.gunReverb, t, 0.05);
 
     this.master.gain.setTargetAtTime(this.muted ? 0 : a.master, t, 0.05);
     this.busEngine.gain.setTargetAtTime(a.engine, t, 0.1);
@@ -427,12 +461,12 @@ export class GameAudio {
     this.gunVoices.push(t + 0.09);
     const v = config.audio.gun;
     const r = Math.random();
-    // Crack: a very short, bright, saturated muzzle report (no resonant band = no "knock").
-    this.noiseBurst(this.busGun, 'highpass', 1500 + r * 500, 0.5, 2.4 * v, 0.0005, 0.04, undefined, 2);
-    // Punch: saturated low-mid blast that sweeps down fast.
-    this.noiseBurst(this.busGun, 'lowpass', 1400 + r * 300, 0.6, 0.7 * v, 0.001, 0.085, 220, 4, true);
+    // Report: a short, wide-band (low Q, so no "knock") burst, kept under 2.5 kHz so it isn't shrill.
+    this.noiseBurst(this.busGun, 'bandpass', 900 + r * 300, 0.35, 0.9 * v, 0.0008, 0.035, 500, 2);
+    // Body: a heavy, saturated low blast that sinks fast: most of the shot.
+    this.noiseBurst(this.busGun, 'lowpass', 750 + r * 150, 0.6, 1.0 * v, 0.001, 0.12, 120, 4, true);
     // Thump: the round leaving the barrel, felt in the chest.
-    this.tone(this.busGun, 'sine', 85 + r * 15, 38, 0.8 * v, 0.07, 2);
+    this.tone(this.busGun, 'sine', 68 + r * 10, 32, 1.0 * v, 0.1, 2);
   }
 
   private launchWhoosh(): void {
