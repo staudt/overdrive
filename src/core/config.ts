@@ -166,8 +166,8 @@ export const config = {
   render: {
     sunDir: [0.35, 0.55, -0.75] as [number, number, number],
     exposure: 1.0,
-    bloomStrength: 1.2,
-    bloomThreshold: 0.75,
+    bloomStrength: 0.8,
+    bloomThreshold: 0.9,
     fogDensity: 0.00018,
   },
 
@@ -180,6 +180,10 @@ export const config = {
     contrailSeconds: 1.5,
     /** Global multiplier on spawn counts for events and trails. */
     density: 1,
+    /** Multiplier on engine flame + nozzle glow brightness (bloom amplifies it). */
+    flameGlow: 0.45,
+    /** Multiplier on engine flame length. */
+    flameLength: 0.75,
   },
 };
 

@@ -13,6 +13,8 @@ Overdrive is a wild 3D third-person dogfighter: bullet hell meets Luftrausers. P
   - `--wait=ms`: settle time after the game reports ready (default 2500).
   - Example: `npm run smoke -- default --no-build --wait=4000`
   - Output: `artifacts/smoke/<scenario>.png` and `artifacts/smoke/summary.json`. Exit code 1 on failure.
+- `node scripts/shots.mjs [--no-build] [boost|skim|dive|stall|ram|canyon]`: scripted flights (drives `__game.input.external` on a timeline), saving frames to `artifacts/shots/` and printing in-page fps. For eyeballing feel and FX, not pass/fail.
+- URL params: `?shot` hides the click-to-fly gate (smoke and shots use it). `?debug` opens the tuning panel. `?fxdemo` spawns FX in front of the ship.
 - URL params: `?scenario=name` selects a scenario, exposed as `window.__game.scenario`.
 - Scenarios: `default`, `low-water`, `canyon-run`, `stall-test`, `dive-test`, `dummies`.
 

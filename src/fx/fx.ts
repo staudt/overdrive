@@ -352,10 +352,12 @@ export class Fx {
     const wantLen = s.stalled ? 0.6 : ts === -1 ? 0.8 : ts === 0 ? 3.2 : ts === 1 ? 6 : 13;
     const wantI = s.stalled ? 0.4 : ts === -1 ? 0.5 : ts === 0 ? 0.9 : ts === 1 ? 1.2 : 1.7;
     const k = Math.min(1, dt * 7);
+    const glow = config.fx.flameGlow;
+    const lenMul = config.fx.flameLength;
     for (let i = 0; i < this.flames.length; i++) {
       this.flameLen[i] = this.flameLen[i]! + (wantLen - this.flameLen[i]!) * k;
       this.flameI[i] = this.flameI[i]! + (wantI - this.flameI[i]!) * k;
-      this.flames[i]!.update(T, this.flameLen[i]!, this.flameI[i]!, ts === 2 ? 1 : ts === 1 ? 0.25 : 0);
+      this.flames[i]!.update(T, this.flameLen[i]! * lenMul, this.flameI[i]! * glow, ts === 2 ? 1 : ts === 1 ? 0.25 : 0);
     }
 
     const sp = s.speed;

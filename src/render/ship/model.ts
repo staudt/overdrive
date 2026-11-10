@@ -21,6 +21,7 @@ import {
 } from 'three';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ShipState } from '../../sim/types';
+import { config } from '../../core/config';
 
 export interface ShipModel {
   group: Group;
@@ -357,7 +358,8 @@ export function createShipModel(): ShipModel {
       const want = s.throttleState === -1 ? 0.4 : s.throttleState === 0 ? 1 : s.throttleState === 1 ? 1.9 : 3.6;
       glow += (want - glow) * Math.min(1, dt * 8);
       const flick = glow * (0.92 + 0.08 * Math.sin(t * 60) + 0.05 * Math.sin(t * 97));
-      target.setRGB(3.2 * flick, 0.6 * flick + 0.25, 2.4 * flick);
+      const g = config.fx.flameGlow * 2;
+      target.setRGB(3.2 * flick * g, (0.6 * flick + 0.25) * g, 2.4 * flick * g);
       for (const m of nozzleMats) m.color.copy(target);
 
       const k = Math.min(1, dt * 10);
