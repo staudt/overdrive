@@ -9,6 +9,8 @@ import {
   EffectComposer,
   EffectPass,
   RenderPass,
+  SMAAEffect,
+  SMAAPreset,
   ToneMappingEffect,
   ToneMappingMode,
 } from 'postprocessing';
@@ -122,6 +124,7 @@ export class Post {
   private readonly bloom: BloomEffect;
   private readonly distort = new DistortEffect();
   private readonly final = new FinalEffect();
+  private readonly smaaPass: EffectPass;
   private boost = 0;
   private under = 0;
 
@@ -143,6 +146,9 @@ export class Post {
     const tone = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
     this.composer.addPass(new EffectPass(camera, this.distort));
     this.composer.addPass(new EffectPass(camera, this.bloom, tone, this.final));
+    // Anti-aliasing last, on the tone-mapped image (cleans canyon rims and wing edges).
+    this.smaaPass = new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH }));
+    this.composer.addPass(this.smaaPass);
   }
 
   setSize(w: number, h: number): void {
@@ -153,6 +159,7 @@ export class Post {
     const k = 1 - Math.exp(-dt * 8);
     this.boost += (state.boost - this.boost) * k;
     this.under += ((state.underwater ? 1 : 0) - this.under) * k;
+    this.smaaPass.enabled = config.render.smaa;
     this.bloom.intensity = config.render.bloomStrength;
     this.bloom.luminanceMaterial.threshold = config.render.bloomThreshold;
     this.distort.set(this.boost, this.under, state.time);

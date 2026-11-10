@@ -213,6 +213,8 @@ export const config = {
     bloomStrength: 0.8,
     bloomThreshold: 0.9,
     fogDensity: 0.00018,
+    /** SMAA anti-aliasing pass (toggle to compare / save GPU). */
+    smaa: true,
   },
 
   /** Owned by render/ship + fx/*. Agents may add fields. */
