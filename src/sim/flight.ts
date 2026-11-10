@@ -53,6 +53,12 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     stallTimer: 0,
     depth: -pos.y,
     submerged: false,
+    diveSpeed: 0,
+    diveAngle: 0,
+    diveK: config.water.buoyancyK,
+    diveAim: quat.clone(),
+    skimming: false,
+    bounceTimer: 0,
     altitude: pos.y,
     shield: config.combat.shieldMax,
     shieldDelay: 0,
@@ -140,7 +146,11 @@ function stepAttitude(s: ShipState, dt: number): void {
 
   let cap = maxTurnRate(s.speed) * auth;
   if (s.breakTurn !== 0) cap *= f.breakTurnMult;
-  if (s.stalled) {
+  if (s.bounceTimer > 0 && s.speed > 1) {
+    // Just bounced off terrain: follow the rebound so the nose can't dig back in.
+    _d.copy(s.vel).normalize();
+    cap = Math.max(cap, f.turnRateBest * 1.5);
+  } else if (s.stalled) {
     // Nose drops: target mostly straight down, with a little player authority left.
     _d.multiplyScalar(f.stallAuthority).addScaledVector(UP, -(1 - f.stallAuthority)).normalize();
     cap = Math.max(cap, f.stallNoseDropRate);
@@ -257,6 +267,7 @@ function stepAim(s: ShipState, inp: InputFrame, dt: number): void {
  */
 export function stepFlight(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]): void {
   s.breakTurn = inp.left === inp.right ? 0 : inp.left ? -1 : 1;
+  if (s.bounceTimer > 0) s.bounceTimer -= dt;
   stepAim(s, inp, dt);
 
   s.speed = s.vel.length();

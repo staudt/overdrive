@@ -103,13 +103,24 @@ export class Flame {
   intensity = 1;
   private readonly seed: number;
 
-  constructor(anchor: Object3D, geo: BufferGeometry, seed: number) {
+  private readonly glowColor: Color;
+
+  /** palette: 'magenta' main engines, 'yellow' boost thrusters. scale: radius multiplier. */
+  constructor(anchor: Object3D, geo: BufferGeometry, seed: number, palette: 'magenta' | 'yellow' = 'magenta', scale = 1) {
     this.seed = seed;
-    const defs: [number, number, Color, Color, number][] = [
-      [0.62, 1.0, new Color(2.6, 0.35, 2.0), new Color(3.4, 0.9, 3.0), 1],
-      [0.36, 0.7, new Color(4.5, 2.4, 4.2), new Color(5.0, 4.2, 5.0), 0.8],
-    ];
-    for (const [rad, lenMul, a, b, i] of defs) {
+    const defs: [number, number, Color, Color, number][] =
+      palette === 'yellow'
+        ? [
+            [0.62, 1.0, new Color(3.2, 1.7, 0.15), new Color(3.8, 2.6, 0.5), 1],
+            [0.34, 0.75, new Color(4.6, 4.0, 1.4), new Color(5.0, 4.8, 3.2), 0.8],
+          ]
+        : [
+            [0.62, 1.0, new Color(2.6, 0.35, 2.0), new Color(3.4, 0.9, 3.0), 1],
+            [0.36, 0.7, new Color(4.5, 2.4, 4.2), new Color(5.0, 4.2, 5.0), 0.8],
+          ];
+    this.glowColor = palette === 'yellow' ? new Color(3, 2.2, 0.4) : new Color(3, 0.7, 2.6);
+    for (const [rad0, lenMul, a, b, i] of defs) {
+      const rad = rad0 * scale;
       const mat = new ShaderMaterial({
         vertexShader: VERT,
         fragmentShader: FRAG,
@@ -160,7 +171,8 @@ export class Flame {
     }
     const sz = (1.4 + len * 0.22) * flick;
     this.sprite.scale.set(sz, sz, 1);
-    this.spriteMat.color.setRGB(3 * intensity, 0.7 * intensity, 2.6 * intensity);
+    this.spriteMat.color.copy(this.glowColor).multiplyScalar(intensity);
+    this.sprite.visible = len > 0.05;
   }
 }
 

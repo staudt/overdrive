@@ -59,6 +59,16 @@ export interface ShipState {
   /** Depth below the wave surface (positive = underwater). */
   depth: number;
   submerged: boolean;
+  /** Dive bookkeeping: speed and angle (rad below horizontal) at entry, spring stiffness used. */
+  diveSpeed: number;
+  diveAngle: number;
+  diveK: number;
+  /** Aim the dive flips toward (the entry angle mirrored upward). */
+  diveAim: Quaternion;
+  /** Riding the surface after a too-shallow contact (no dive). */
+  skimming: boolean;
+  /** Seconds left of post-impact recovery (nose follows velocity, aim ignored). */
+  bounceTimer: number;
   /** Height above ground/water directly below. */
   altitude: number;
   shield: number;

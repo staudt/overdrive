@@ -7,6 +7,7 @@ export class Input {
   private dx = 0;
   private dy = 0;
   mouseDown = false;
+  private wheel = 0;
   /** Tests/smoke can drive the game by overriding fields here (merged over live input). */
   external: Partial<InputFrame> | null = null;
 
@@ -27,10 +28,25 @@ export class Input {
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
     window.addEventListener('blur', () => this.keys.clear());
+    el.addEventListener(
+      'wheel',
+      (e) => {
+        e.preventDefault();
+        this.wheel += e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+      },
+      { passive: false },
+    );
   }
 
   get locked(): boolean {
     return document.pointerLockElement === this.el;
+  }
+
+  /** Accumulated wheel deltaY since the last call (pixels; + = away from the user). */
+  takeWheel(): number {
+    const w = this.wheel;
+    this.wheel = 0;
+    return w;
   }
 
   isDown(code: string): boolean {

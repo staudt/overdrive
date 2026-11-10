@@ -55,6 +55,8 @@ const BLACK0 = col(0.07, 0.06, 0.06, 0.92);
 const BLACK1 = col(0.16, 0.15, 0.15, 0);
 const BURN0 = col(4, 1.4, 3.2, 0.9);
 const BURN1 = col(1.4, 0.15, 1.2, 0);
+const BOOST0 = col(4, 3, 0.6, 1);
+const BOOST1 = col(2, 0.6, 0.05, 0);
 const VAPOR0 = col(0.97, 0.97, 1, 0.5);
 const VAPOR1 = col(1, 1, 1, 0);
 const STALL0 = col(0.1, 0.1, 0.11, 0.75);
@@ -100,12 +102,14 @@ export class Fx {
   private readonly add: ParticleSystem;
   private readonly rings: Ring[] = [];
   private flames: Flame[] | null = null;
+  private boosterFlames: Flame[] | null = null;
+  private boosterLen = 0;
   private readonly wingRibbons: Ribbon[];
   private readonly burnRibbons: Ribbon[];
   private contrail = 0;
   private flameLen = [0, 0];
   private flameI = [1, 1];
-  private readonly acc = new Float32Array(16);
+  private readonly acc = new Float32Array(24);
   private readonly demo: boolean;
   private demoT = 0;
   private demoN = 0;
@@ -200,10 +204,27 @@ export class Fx {
         this.trauma = Math.min(1, this.trauma + (e.killed ? 0.9 : 0.4));
         break;
       case 'boostStart':
-        this.trauma = Math.min(1, this.trauma + 0.12);
+        this.boostBurst(world);
+        this.trauma = Math.min(1, this.trauma + 0.35);
         break;
       default:
         break;
+    }
+  }
+
+  /** Boost kick: yellow shockwave rings behind the ship and a spray of hot sparks. */
+  private boostBurst(world: World): void {
+    const s = world.ship;
+    const T = this.time;
+    this.dir.set(0, 0, 1).applyQuaternion(s.quat); // backwards
+    const x = s.pos.x + this.dir.x * 3;
+    const y = s.pos.y + this.dir.y * 3;
+    const z = s.pos.z + this.dir.z * 3;
+    this.ring(x, y, z, 14, 0.35, true, new Color(1.6, 1.2, 0.25));
+    this.ring(x, y, z, 8, 0.25, true, new Color(1.2, 1.2, 1.2));
+    for (let n = 0; n < 90 * config.fx.density; n++) {
+      const sp = rnd(30, 90);
+      this.add.emit(T, x, y, z, s.vel.x * 0.4 + this.dir.x * sp + rnd(-25, 25), s.vel.y * 0.4 + this.dir.y * sp + rnd(-25, 25), s.vel.z * 0.4 + this.dir.z * sp + rnd(-25, 25), rnd(0.3, 0.7), 0.8, 0.2, 0, 2.5, 0.06, BOOST0, BOOST1);
     }
   }
 
@@ -358,6 +379,22 @@ export class Fx {
       this.flameLen[i] = this.flameLen[i]! + (wantLen - this.flameLen[i]!) * k;
       this.flameI[i] = this.flameI[i]! + (wantI - this.flameI[i]!) * k;
       this.flames[i]!.update(T, this.flameLen[i]! * lenMul, this.flameI[i]! * glow, ts === 2 ? 1 : ts === 1 ? 0.25 : 0);
+    }
+
+    // Yellow boost thrusters.
+    if (!this.boosterFlames) {
+      const geo = coneGeo();
+      this.boosterFlames = ship.boosters.map((a, i) => new Flame(a, geo, 3 + i * 1.3, 'yellow', 0.75));
+    }
+    this.boosterLen += ((ts === 2 ? 15 : 0) - this.boosterLen) * Math.min(1, dt * (ts === 2 ? 10 : 6));
+    for (const bf of this.boosterFlames) bf.update(T, this.boosterLen * lenMul, 1.6 * glow, 1);
+    if (ts === 2) {
+      for (let i = 0; i < ship.boosters.length; i++) {
+        ship.boosters[i]!.getWorldPosition(this.p);
+        for (let n = this.take(16 + i, 70, dt); n > 0; n--) {
+          this.add.emit(T, this.p.x, this.p.y, this.p.z, s.vel.x * 0.3 + rnd(-3, 3), s.vel.y * 0.3 + rnd(-3, 3), s.vel.z * 0.3 + rnd(-3, 3), rnd(0.25, 0.5), 0.6, 0.2, 0, 1.6, 0.06, BOOST0, BOOST1);
+        }
+      }
     }
 
     const sp = s.speed;

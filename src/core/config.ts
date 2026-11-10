@@ -20,10 +20,10 @@ export const config = {
     minSpeed: 15,
     cruiseSpeed: 70,
     maxSpeed: 110,
-    boostSpeed: 190,
+    boostSpeed: 300,
     /** Speed controller rates, m/s². */
     accel: 45,
-    boostAccel: 170,
+    boostAccel: 260,
     /** Easing back to cruise when W/boost released. */
     settleAccel: 25,
     brakeDecel: 70,
@@ -85,17 +85,24 @@ export const config = {
 
   /** Owned by sim/water.ts + sim/waves.ts (render/ocean.ts must use the same wave params). */
   water: {
-    /** Spring: upward accel = buoyancyK * depth - damping * vel.y. */
+    /**
+     * Dive: entering steeper than minDiveAngle goes under; a spring (upward accel =
+     * k * depth - damping * vel.y) turns you around and you exit at the mirrored angle with
+     * exitSpeedMul * entry speed. k = max(buoyancyK, (entry vertical speed / maxDepth)²).
+     */
+    minDiveAngle: 12 * DEG,
     buoyancyK: 25,
     damping: 1.0,
+    maxDepth: 30,
     /** Horizontal velocity drag underwater, 1/s. */
     drag: 0.8,
-    /** Depth hysteresis before counting as submerged, m. */
-    enterDepth: 0.4,
+    exitSpeedMul: 1.0,
+    /** How fast the aim flips to the mirrored exit angle while under, 1/s. */
+    aimFlipRate: 9,
+    /** Shallow contacts ride the surface at this height (ship center above the wave), m. */
+    hoverHeight: 1.4,
     /** Steering authority underwater. */
     authority: 0.45,
-    /** Upward kick multiplier on exit (Luftrausers spring). */
-    exitKick: 1.15,
     /** Skim height for spray wake, m. */
     skimHeight: 6,
     waves: {
@@ -121,6 +128,13 @@ export const config = {
     terrainFriction: 0.85,
     /** Ship collision radius, m. */
     shipRadius: 4,
+    /** Nose probe: distance ahead of center and its radius, m (stops the nose sinking into hills). */
+    noseLength: 6.5,
+    noseRadius: 1.2,
+    /** Minimum push-off speed along the surface normal after any terrain hit, m/s. */
+    minBounce: 14,
+    /** Seconds after a hit where the nose follows the bounce instead of the aim. */
+    bounceRecovery: 0.35,
     /** Ram damage to target per m/s of closing speed. */
     ramDamagePerMps: 1.2,
     ramPush: 25,
@@ -148,13 +162,21 @@ export const config = {
 
   /** Owned by render/camera.ts. */
   camera: {
-    fov: 70,
-    fovBoost: 92,
-    fovPerSpeed: 0.08,
-    distance: 18,
-    height: 4.5,
-    /** Look-ahead along aim, m. */
-    lookAhead: 30,
+    fov: 110,
+    /** Extra FOV while boosting, degrees. */
+    fovBoostAdd: 6,
+    /** FOV degrees per m/s above cruise. */
+    fovPerSpeed: 0.03,
+    /** Camera distance behind the ship (mouse wheel), m. */
+    distance: 16,
+    minDistance: 6,
+    maxDistance: 90,
+    /** Wheel zoom sensitivity (fraction per wheel notch of 100). */
+    wheelZoom: 0.12,
+    /** Ship's on-screen position below center, as a fraction of the half-height (keeps the aim clear). */
+    shipScreenY: 0.42,
+    /** Camera pulls back by this factor while boosting. */
+    boostPullback: 1.35,
     followResponse: 10,
     /** Trauma (0..1) lost per second. */
     shakeDecay: 1.6,

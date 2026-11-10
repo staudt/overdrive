@@ -58,7 +58,83 @@ describe('water spring', () => {
   });
 });
 
+describe('dive mirror bounce', () => {
+  const dive = (deg: number, speed: number) => {
+    const w = new World(flatSea(), { shipPos: v(0, 8, 0), shipYaw: 0, dummyCount: 0, shipSpeed: speed });
+    const a = (deg * Math.PI) / 180;
+    w.ship.vel.set(0, -Math.sin(a) * speed, -Math.cos(a) * speed);
+    setAim(w.ship, 0, -a);
+    w.ship.quat.setFromAxisAngle(v(1, 0, 0), -a);
+    let enter: { speed: number; angle: number } | null = null;
+    let exit: { speed: number; angle: number } | null = null;
+    let maxDepth = 0;
+    run(w, 3, {}, () => {
+      maxDepth = Math.max(maxDepth, w.ship.depth);
+      for (const e of w.drainEvents()) {
+        const sp = w.ship.vel.length();
+        if (e.type === 'waterEnter' && !enter) enter = { speed: sp, angle: Math.asin(-w.ship.vel.y / sp) };
+        if (e.type === 'waterExit' && !exit) exit = { speed: sp, angle: Math.asin(w.ship.vel.y / sp) };
+      }
+    });
+    return { enter: enter!, exit: exit!, maxDepth, w };
+  };
+
+  it('45° dive exits at 45° up with the entry speed', () => {
+    const { enter, exit, maxDepth } = dive(45, 100);
+    expect(enter).toBeTruthy();
+    expect(exit).toBeTruthy();
+    expect(maxDepth).toBeGreaterThan(3);
+    expect(maxDepth).toBeLessThan(config.water.maxDepth + 5);
+    expect(Math.abs(exit.angle - enter.angle)).toBeLessThan(0.05);
+    expect(Math.abs(exit.speed - enter.speed) / enter.speed).toBeLessThan(0.03);
+  });
+
+  it('the aim flips up with the launch, so the ship keeps climbing', () => {
+    const { w } = dive(45, 100);
+    expect(w.ship.pos.y).toBeGreaterThan(40);
+  });
+
+  it('a boosted vertical dive stays above maxDepth and comes back up', () => {
+    const { exit, maxDepth } = dive(85, 300);
+    expect(exit).toBeTruthy();
+    expect(maxDepth).toBeLessThan(config.water.maxDepth + 5);
+  });
+
+  it('a shallow contact skims the surface instead of diving', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 3, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 90 });
+    const a = (5 * Math.PI) / 180;
+    w.ship.vel.set(0, -Math.sin(a) * 90, -Math.cos(a) * 90);
+    setAim(w.ship, 0, -a);
+    w.ship.quat.setFromAxisAngle(v(1, 0, 0), -a);
+    let skimmed = false;
+    run(w, 2, {}, () => {
+      expect(w.ship.submerged).toBe(false);
+      expect(w.ship.depth).toBeLessThan(-config.water.hoverHeight + 0.01);
+      if (w.ship.skimming) skimmed = true;
+    });
+    expect(skimmed).toBe(true);
+  });
+});
+
 describe('terrain collision', () => {
+  it('a stalled ship falling nose-first into a hillside never gets stuck', () => {
+    // 35° slope rising toward -Z.
+    const hill = fnTerrain((_x, z) => Math.max(-60, -z * 0.7));
+    const w = new World(hill, { shipPos: v(0, 160, -200), shipYaw: 0, dummyCount: 0, shipSpeed: 10 });
+    w.ship.stalled = true;
+    const pos = v(0, 0, 0);
+    run(w, 4, (t) => {
+      if (t > 3) pos.copy(w.ship.pos);
+      setAim(w.ship, 0, -1.3); // player keeps aiming into the hill
+      return { brake: true };
+    });
+    const p3 = pos.clone();
+    run(w, 1, () => (setAim(w.ship, 0, -1.3), { brake: true }));
+    expect(w.ship.pos.distanceTo(p3)).toBeGreaterThan(8); // still moving, not pinned
+    const nose = v(0, 0, -config.combat.noseLength).applyQuaternion(w.ship.quat).add(w.ship.pos);
+    expect(nose.y).toBeGreaterThan(hill.heightAt(nose.x, nose.z));
+  });
+
   it('a boosted head-on wall hit bounces back without tunnelling and costs shield', () => {
     const wall = fnTerrain((_x, z) => (z < -100 ? 300 : -60));
     const w = new World(wall, { shipPos: v(0, 50, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 190 });

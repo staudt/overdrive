@@ -6,6 +6,7 @@ import {
   BackSide,
   BufferGeometry,
   CircleGeometry,
+  CylinderGeometry,
   Color,
   DataTexture,
   ExtrudeGeometry,
@@ -27,6 +28,8 @@ export interface ShipModel {
   group: Group;
   /** Engine exhaust anchor points (local, pointing +Z backwards). */
   engines: Object3D[];
+  /** Boost thruster anchors (yellow jets, only fire while boosting; pods deploy on boost). */
+  boosters: Object3D[];
   /** Wingtip anchors for contrail ribbons. */
   wingtips: Object3D[];
   /** Animate flaps, engine glow intensity, etc. Position/orientation are set by the caller. */
@@ -336,6 +339,33 @@ export function createShipModel(): ShipModel {
     return anchor;
   });
 
+  // Boost pods: stubby yellow-banded thrusters that slide out of the wing roots on boost.
+  const podMat = new MeshToonMaterial({ color: '#3a3f4c', gradientMap: grad });
+  const bandMat = new MeshToonMaterial({ color: '#ffc21a', gradientMap: grad });
+  const podNozzleMat = new MeshBasicMaterial({ color: new Color(3, 2.2, 0.4), toneMapped: false });
+  const podGeo = new CylinderGeometry(0.42, 0.55, 3.2, 10).rotateX(Math.PI / 2);
+  const bandGeo = new CylinderGeometry(0.58, 0.58, 0.5, 10).rotateX(Math.PI / 2);
+  const pods: Group[] = [];
+  const boosters = [-1, 1].map((sx) => {
+    const pod = new Group();
+    pod.position.set(sx * 2.0, 0.42, 5.0);
+    pod.add(new Mesh(podGeo, podMat));
+    const band = new Mesh(bandGeo, bandMat);
+    band.position.z = 0.9;
+    pod.add(band);
+    const nz = new Mesh(new CircleGeometry(0.42, 10), podNozzleMat);
+    nz.position.z = 1.61;
+    pod.add(nz);
+    const anchor = new Object3D();
+    anchor.position.z = 1.62;
+    pod.add(anchor);
+    pod.scale.setScalar(0.01);
+    group.add(pod);
+    pods.push(pod);
+    return anchor;
+  });
+  let deploy = 0;
+
   const wingtips = [-1, 1].map((sx) => {
     const o = new Object3D();
     o.position.set(sx * 5.6, -0.05, 3.9);
@@ -352,9 +382,18 @@ export function createShipModel(): ShipModel {
   return {
     group,
     engines,
+    boosters,
     wingtips,
     update(dt: number, s: ShipState): void {
       t += dt;
+      deploy += ((s.boosting ? 1 : 0) - deploy) * Math.min(1, dt * (s.boosting ? 14 : 4));
+      pods.forEach((p, i) => {
+        const sx = i === 0 ? -1 : 1;
+        p.scale.setScalar(Math.max(0.01, deploy));
+        p.position.x = sx * (2.0 + 1.1 * deploy);
+        p.visible = deploy > 0.02;
+      });
+      podNozzleMat.color.setRGB(3 * deploy, 2.2 * deploy, 0.4 * deploy).multiplyScalar(config.fx.flameGlow * 2);
       const want = s.throttleState === -1 ? 0.4 : s.throttleState === 0 ? 1 : s.throttleState === 1 ? 1.9 : 3.6;
       glow += (want - glow) * Math.min(1, dt * 8);
       const flick = glow * (0.92 + 0.08 * Math.sin(t * 60) + 0.05 * Math.sin(t * 97));

@@ -99,6 +99,7 @@ function frame(now: number): void {
   ship.update(dt, s);
   dummyView.update(dt, world.dummies);
 
+  chase.zoom(input.takeWheel());
   chase.trauma = Math.min(1, chase.trauma + fx.trauma);
   fx.trauma = 0;
   chase.update(dt, s);

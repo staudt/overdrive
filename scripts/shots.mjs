@@ -12,7 +12,7 @@ import { chromium } from 'playwright-core';
 
 /** timeline: [atMs, inputOverride | null, snap?] */
 const SHOTS = {
-  boost: { scenario: 'default', steps: [[0, { boost: true, right: true }], [1200, null, true], [2200, null, true]] },
+  boost: { scenario: 'default', steps: [[0, {}], [500, { boost: true }], [650, null, true], [1500, null, true], [2300, { boost: true, right: true }], [2700, null, true]] },
   skim: { scenario: 'low-water', steps: [[0, { throttle: true }], [1500, null, true], [2500, { boost: true }], [3500, null, true]] },
   dive: { scenario: 'dive-test', steps: [[0, {}], [1400, null, true], [1700, null, true], [2000, null, true], [2300, null, true], [2700, null, true], [3200, null, true]] },
   stall: { scenario: 'stall-test', steps: [[0, { brake: true }], [3500, null, true], [5000, null, true]] },
