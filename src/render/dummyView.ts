@@ -1,5 +1,6 @@
 /** Target drones: dark angular attack drones with glowing magenta lights. Two instanced meshes. */
 import {
+  BoxGeometry,
   BufferGeometry,
   Color,
   DataTexture,
@@ -96,7 +97,22 @@ function lights(): BufferGeometry {
   return mergeGeometries([box(0, 0.95, 0.6, 0.35), box(3.9, -0.2, 2.8, 0.3), box(-3.9, -0.2, 2.8, 0.3), box(0, 0.1, -3.7, 0.25)])!;
 }
 
+/** Gunner chin pod: two stubby barrels under the nose; tips glow while charging. */
+function podGeo(): BufferGeometry {
+  const a = new BoxGeometry(0.5, 0.5, 2.6).translate(-0.7, -0.9, -2.8);
+  const b = new BoxGeometry(0.5, 0.5, 2.6).translate(0.7, -0.9, -2.8);
+  const c = new BoxGeometry(2.0, 0.6, 1.2).translate(0, -0.7, -1.6);
+  return mergeGeometries([a.toNonIndexed(), b.toNonIndexed(), c.toNonIndexed()])!;
+}
+function podTips(): BufferGeometry {
+  const a = new BoxGeometry(0.55, 0.55, 0.4).translate(-0.7, -0.9, -4.2);
+  const b = new BoxGeometry(0.55, 0.55, 0.4).translate(0.7, -0.9, -4.2);
+  return mergeGeometries([a.toNonIndexed(), b.toNonIndexed()])!;
+}
+
 export class DummyView {
+  private readonly pod: InstancedMesh;
+  private readonly tips: InstancedMesh;
   private readonly body: InstancedMesh;
   private readonly glow: InstancedMesh;
   private readonly m = new Matrix4();
@@ -115,7 +131,9 @@ export class DummyView {
       MAX,
     );
     this.glow = new InstancedMesh(lights(), new MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), MAX);
-    for (const im of [this.body, this.glow]) {
+    this.pod = new InstancedMesh(podGeo(), new MeshToonMaterial({ color: '#ffffff', gradientMap: grad }), MAX);
+    this.tips = new InstancedMesh(podTips(), new MeshBasicMaterial({ color: '#ffffff', toneMapped: false }), MAX);
+    for (const im of [this.body, this.glow, this.pod, this.tips]) {
       im.frustumCulled = false;
       im.count = 0;
       im.instanceMatrix.setUsage(35048);
@@ -127,19 +145,40 @@ export class DummyView {
   update(dt: number, dummies: Dummy[]): void {
     this.t += dt;
     let n = 0;
+    let g = 0;
     for (const d of dummies) {
       if (!d.alive || n >= MAX) continue;
       this.m.compose(d.pos, d.quat, this.scale);
       this.body.setMatrixAt(n, this.m);
       this.glow.setMatrixAt(n, this.m);
       const f = Math.max(0, 1 - d.hitFlash / 0.18);
-      this.body.setColorAt(n, this.c.setRGB(0.1 + f * 5, 0.11 + f * 5, 0.15 + f * 5));
-      const pulse = 0.75 + 0.25 * Math.sin(this.t * 6 + d.id * 1.9);
-      this.glow.setColorAt(n, this.c.setRGB(3.2 * pulse + f * 4, 0.25 * pulse + f * 4, 1.3 * pulse + f * 4));
+      if (d.kind === 'gunner') {
+        // Red/orange scheme; the pod tips ramp to white-hot in the last 0.5 s before firing.
+        const ch = d.fireTimer < 0.5 ? 1 - Math.max(d.fireTimer, 0) / 0.5 : 0;
+        this.body.setColorAt(n, this.c.setRGB(0.22 + f * 5, 0.07 + f * 5, 0.05 + f * 5));
+        const pulse = 0.8 + 0.2 * Math.sin(this.t * 8 + d.id * 1.9);
+        this.glow.setColorAt(n, this.c.setRGB(3.6 * pulse + f * 4 + ch * 3, 1.0 * pulse + f * 4 + ch * 2, 0.1 * pulse + f * 4 + ch));
+        this.pod.setMatrixAt(g, this.m);
+        this.tips.setMatrixAt(g, this.m);
+        this.pod.setColorAt(g, this.c.setRGB(0.12 + f * 5, 0.06 + f * 5, 0.05 + f * 5));
+        const cp = ch * (0.7 + 0.3 * Math.sin(this.t * 40));
+        this.tips.setColorAt(g, this.c.setRGB(2 + cp * 8, 0.5 + cp * 5, 0.1 + cp * 3));
+        g++;
+      } else {
+        this.body.setColorAt(n, this.c.setRGB(0.1 + f * 5, 0.11 + f * 5, 0.15 + f * 5));
+        const pulse = 0.75 + 0.25 * Math.sin(this.t * 6 + d.id * 1.9);
+        this.glow.setColorAt(n, this.c.setRGB(3.2 * pulse + f * 4, 0.25 * pulse + f * 4, 1.3 * pulse + f * 4));
+      }
       n++;
     }
     this.body.count = n;
     this.glow.count = n;
+    this.pod.count = g;
+    this.tips.count = g;
+    this.pod.instanceMatrix.needsUpdate = true;
+    this.tips.instanceMatrix.needsUpdate = true;
+    if (this.pod.instanceColor) this.pod.instanceColor.needsUpdate = true;
+    if (this.tips.instanceColor) this.tips.instanceColor.needsUpdate = true;
     this.body.instanceMatrix.needsUpdate = true;
     this.glow.instanceMatrix.needsUpdate = true;
     if (this.body.instanceColor) this.body.instanceColor.needsUpdate = true;

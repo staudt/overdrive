@@ -58,6 +58,13 @@ export class GameAudio {
   private readonly boomVoices: number[] = [];
   private readonly shipPos = { x: 0, y: 0, z: 0 };
   private prevThrottle = 0;
+  private busEnemy!: GainNode;
+  private lastEnemy: Record<string, number> = {};
+  private lastGraze = -10;
+  private lastPlayerHit = -10;
+  private prevShield = 100;
+  private beepT = 0;
+  private deadUntil = 0;
   private bubbleT = 0;
 
   constructor() {
@@ -215,6 +222,8 @@ export class GameAudio {
     slapLp.connect(slapFb);
     slapLp.connect(this.bus);
     this.busMissile = this.mkGain(ctx, 1, this.bus);
+    this.busEnemy = this.mkGain(ctx, config.audio.enemyFire, this.bus);
+    this.busEnemy.connect(this.gunVerbIn);
 
     // Gun mechanical rumble: lowpassed noise, gated by recent gunFire events.
     // (An AudioBufferSourceNode's buffer can only be set once: build this one directly.)
@@ -322,7 +331,22 @@ export class GameAudio {
     this.busBoost.gain.setTargetAtTime(a.boost, t, 0.1);
     this.busSfx.gain.setTargetAtTime(a.sfx, t, 0.1);
     this.busWater.gain.setTargetAtTime(a.water, t, 0.1);
-    this.muffle.frequency.setTargetAtTime(muffleHz(s.submerged), t, 0.04);
+    this.busEnemy.gain.setTargetAtTime(a.enemyFire, t, 0.1);
+    // Death: the whole bus is ducked and muffled for a few seconds; restarting restores it.
+    const dying = s.dead && t < this.deadUntil;
+    this.bus.gain.setTargetAtTime(dying ? 0.06 : 1, t, dying ? 0.05 : 0.6);
+    this.muffle.frequency.setTargetAtTime(dying ? 350 : muffleHz(s.submerged), t, 0.04);
+
+    // Low-shield warning: a dull double beep that speeds up as the shield drops.
+    const low = !s.dead && s.shield < 25 && s.shield <= this.prevShield + 0.01;
+    this.prevShield = s.shield;
+    this.beepT -= dt;
+    if (low && this.beepT <= 0) {
+      const u = 1 - s.shield / 25;
+      this.beepT = 0.9 - 0.5 * u;
+      this.tone(this.busSfx, 'square', 330, 300, 0.1 * a.warning, 0.1, 2);
+      this.tone(this.busSfx, 'sine', 165, 150, 0.35 * a.warning, 0.12);
+    }
 
     const lvl = engineLevel(s.throttleState, s.speed, s.holdTimer, s.stalled, bs);
     const whineHz = engineWhineHz(s.speed, s.throttleState, bs);
@@ -432,9 +456,128 @@ export class GameAudio {
         this.tone(this.busBoost, 'sine', 160, 38, 1, 0.5, 4);
         this.noiseBurst(this.busBoost, 'lowpass', 3000, 0.7, 0.5, 0.001, 0.12);
         break;
+      case 'enemyFire':
+        this.enemyShot(e.kind, e.count);
+        break;
+      case 'playerHit':
+        this.playerHitSfx();
+        break;
+      case 'graze':
+        this.grazeSfx();
+        break;
+      case 'playerDeath':
+        this.deathSfx();
+        break;
+      case 'bossWarning':
+        this.klaxon();
+        break;
+      case 'bossArrive':
+        this.horn();
+        break;
       default:
         break;
     }
+  }
+
+  private enemyShot(kind: string, count: number): void {
+    const t = this.ctx!.currentTime;
+    const min = kind === 'spiral' ? 0.07 : 0.05;
+    if (t - (this.lastEnemy[kind] ?? -10) < min) return;
+    this.lastEnemy[kind] = t;
+    const v = config.audio.enemyFire;
+    const d = this.busEnemy;
+    const r = Math.random();
+    const k = Math.min(1.4, 0.7 + count * 0.03);
+    switch (kind) {
+      case 'flak':
+        this.tone(d, 'sine', 90, 34, 1.1 * v * k, 0.35, 3);
+        this.noiseBurst(d, 'lowpass', 600, 0.8, 0.8 * v * k, 0.004, 0.3, 90, 3, true);
+        break;
+      case 'spiral':
+        this.tone(d, 'triangle', 300 + r * 40, 170, 0.22 * v, 0.09, 1);
+        this.tone(d, 'sine', 120, 80, 0.3 * v, 0.08);
+        break;
+      case 'ring':
+        this.tone(d, 'sine', 70, 28, 1.4 * v, 0.9, 2);
+        this.noiseBurst(d, 'lowpass', 400, 0.7, 1.0 * v, 0.05, 0.9, 70, 2, true);
+        this.noiseBurst(d, 'bandpass', 700, 0.5, 0.4 * v, 0.1, 0.6, 250);
+        break;
+      case 'fan':
+        this.noiseBurst(d, 'bandpass', 250, 1.0, 0.9 * v * k, 0.02, 0.45, 1200);
+        this.tone(d, 'sawtooth', 110, 220, 0.12 * v, 0.35, 2);
+        this.tone(d, 'sine', 80, 40, 0.6 * v, 0.2);
+        break;
+      default: // gunner zap
+        this.tone(d, 'square', 520 + r * 60, 160, 0.14 * v, 0.1, 2);
+        this.noiseBurst(d, 'bandpass', 900, 0.6, 0.3 * v, 0.001, 0.06, 400);
+        this.tone(d, 'sine', 100, 50, 0.4 * v, 0.1);
+        break;
+    }
+  }
+
+  private playerHitSfx(): void {
+    const t = this.ctx!.currentTime;
+    if (t - this.lastPlayerHit < 0.05) return;
+    this.lastPlayerHit = t;
+    const v = config.audio.explosion;
+    this.noiseBurst(this.busSfx, 'lowpass', 2200, 0.7, 1.0 * v, 0.001, 0.12, 300, 5, true);
+    this.noiseBurst(this.busSfx, 'bandpass', 1400, 0.8, 0.5 * v, 0.001, 0.08, 500, 4);
+    this.tone(this.busSfx, 'sine', 120, 36, 1.2 * v, 0.3, 3);
+    this.tone(this.busSfx, 'square', 150, 70, 0.15 * v, 0.12, 3);
+    if (this.prevShield < 35) {
+      // Alarm blip: two dull low pulses.
+      this.tone(this.busSfx, 'square', 280, 260, 0.14 * config.audio.warning, 0.1, 2);
+      setTimeout(() => this.ctx && this.tone(this.busSfx, 'square', 280, 260, 0.14 * config.audio.warning, 0.1, 2), 130);
+    }
+  }
+
+  private grazeSfx(): void {
+    const t = this.ctx!.currentTime;
+    if (t - this.lastGraze < 0.06) return;
+    this.lastGraze = t;
+    // Airy "shff": bandpassed noise swelling and sweeping down, kept under ~3 kHz.
+    this.noiseBurst(this.busSfx, 'bandpass', 2400, 0.7, 0.35, 0.012, 0.13, 700);
+    this.noiseBurst(this.busSfx, 'lowpass', 900, 0.5, 0.2, 0.01, 0.15, 300);
+  }
+
+  private deathSfx(): void {
+    const ctx = this.ctx!;
+    this.deadUntil = ctx.currentTime + 3.5;
+    this.explosion(1.8);
+    this.noiseBurst(this.busSfx, 'lowpass', 3000, 0.7, 1.2, 0.002, 0.25, 200, 5, true);
+    // Muffled ring in the silence (low-ish sine, quiet).
+    const t = ctx.currentTime;
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = 640;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t + 0.3);
+    g.gain.linearRampToValueAtTime(0.03, t + 0.6);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 3.5);
+    o.connect(g).connect(this.master);
+    o.start(t);
+    o.stop(t + 3.6);
+  }
+
+  private klaxon(): void {
+    // Three heavy low pulses with a falling-rising wail.
+    for (let i = 0; i < 3; i++) {
+      const at = i * 0.9;
+      setTimeout(() => {
+        if (!this.ctx) return;
+        this.tone(this.busSfx, 'sawtooth', 150, 110, 0.4 * config.audio.warning, 0.7, 2);
+        this.tone(this.busSfx, 'square', 75, 65, 0.35 * config.audio.warning, 0.7, 2);
+        this.tone(this.busSfx, 'sine', 55, 50, 0.7 * config.audio.warning, 0.7);
+      }, at * 1000);
+    }
+  }
+
+  private horn(): void {
+    const v = config.audio.warning;
+    this.tone(this.busSfx, 'sawtooth', 58, 55, 0.5 * v, 2.2, 2);
+    this.tone(this.busSfx, 'sawtooth', 87, 82, 0.35 * v, 2.2, 2);
+    this.tone(this.busSfx, 'square', 29, 28, 0.6 * v, 2.2, 1);
+    this.noiseBurst(this.busSfx, 'lowpass', 300, 0.7, 0.4 * v, 0.2, 2, 120, 0, true);
   }
 
   /** Big drone explosion (also scaled down for missile booms). */

@@ -225,9 +225,75 @@ export class Fx {
         this.boostBurst(world);
         this.trauma = Math.min(1, this.trauma + 0.35);
         break;
+      case 'playerHit':
+        this.playerHit(e.pos, e.damage);
+        this.trauma = Math.min(1, this.trauma + 0.35 + e.damage / 60);
+        break;
+      case 'graze':
+        this.graze(e.pos);
+        break;
+      case 'enemyFire':
+        this.enemyMuzzle(e.pos, e.kind, e.count);
+        break;
+      case 'playerDeath':
+        this.playerDeath(e.pos);
+        this.trauma = 1;
+        break;
       default:
         break;
     }
+  }
+
+  private playerHit(pos: Vector3, damage: number): void {
+    const k = clamp(damage / 14, 0.6, 2);
+    const T = this.time;
+    const v = this.e0;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.22, 8 * k, 20 * k, 0, 0.1, 0, col(6, 1.2, 0.6, 0.95), col(3, 0.2, 0.1, 0));
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.12, 4 * k, 9 * k, 0, 0.1, 0, col(7, 6, 6, 1), col(3, 1.5, 1.5, 0));
+    for (let i = 0, n = Math.ceil(40 * k * config.fx.density); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(20, 70));
+      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.25, 0.7), 0.6, 0.3, 18, 0.5, 0.05, i % 3 === 0 ? HOTSPARK0 : col(5, 0.9, 0.5, 1), SPARK1);
+    }
+    this.ring(pos.x, pos.y, pos.z, 18 * k, 0.35, true, new Color(1.8, 0.4, 0.3));
+  }
+
+  private graze(pos: Vector3): void {
+    const T = this.time;
+    const v = this.e0;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.12, 1.6, 3, 0, 0.1, 0, col(3, 5, 6, 0.9), col(0.5, 2, 3, 0));
+    for (let i = 0, n = Math.ceil(6 * config.fx.density); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(10, 35));
+      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.2, 0.45), 0.35, 0.2, 0, 1, 0.06, col(2.5, 5, 6, 1), col(0.3, 1.5, 2.5, 0));
+    }
+  }
+
+  private enemyMuzzle(pos: Vector3, kind: string, count: number): void {
+    const T = this.time;
+    const k = clamp(0.6 + Math.sqrt(count) * 0.35, 0.6, 3);
+    const c0 = kind === 'flak' ? col(6, 3.4, 0.8, 0.95) : kind === 'spiral' ? col(3.5, 1.4, 6, 0.9) : kind === 'gunner' ? col(6, 1.8, 0.5, 0.95) : col(6, 1.2, 3.5, 0.95);
+    const c1 = kind === 'flak' ? col(2, 0.7, 0.1, 0) : kind === 'spiral' ? col(1, 0.3, 2, 0) : kind === 'gunner' ? col(2, 0.3, 0.05, 0) : col(2, 0.2, 1.2, 0);
+    const big = kind === 'ring' || kind === 'flak' ? 1.6 : kind === 'gunner' ? 0.6 : 1;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.14, 5 * k * big, 11 * k * big, 0, 0.1, 0, c0, c1);
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.07, 2 * k * big, 4 * k * big, 0, 0.1, 0, col(7, 6, 6, 1), c1);
+  }
+
+  /** The ship blows up: fireball, debris, shockwave and a lingering smoke cloud. */
+  private playerDeath(pos: Vector3): void {
+    this.bigBoom(pos, 2.2);
+    const T = this.time;
+    const v = this.e0;
+    const d = config.fx.density;
+    for (let i = 0, n = Math.ceil(40 * d); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(15, 60));
+      this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(1.5, 2.6), 1.2, 0.8, 22, 0.3, 0, ROCK0, ROCK1);
+    }
+    for (let i = 0, n = Math.ceil(30 * d); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(2, 18));
+      this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y + 4, v.z, rnd(5, 8), 12, rnd(40, 70), -3, 0.5, 0, BLACK0, BLACK1);
+    }
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.35, 30, 90, 0, 0.1, 0, FLASH0, FLASH1);
+    this.ring(pos.x, pos.y, pos.z, 200, 1.1, true, new Color(1.6, 1.2, 0.9));
+    this.ring(pos.x, pos.y, pos.z, 120, 0.7, true, new Color(1.8, 0.5, 0.3));
   }
 
   /** Boost kick: yellow shockwave rings behind the ship and a spray of hot sparks. */

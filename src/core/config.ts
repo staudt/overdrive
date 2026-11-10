@@ -398,6 +398,9 @@ export const config = {
     gunReverb: 0.55,
     missile: 0.6,
     explosion: 1,
+    /** Enemy fire sends (shots, zaps) and warning klaxon/horn/low-shield beeps. */
+    enemyFire: 0.6,
+    warning: 1,
   },
 };
 
