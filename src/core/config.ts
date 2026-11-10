@@ -70,7 +70,8 @@ export const config = {
     ceilingSoft: 250,
 
     mouseSens: 0.0022,
-    aimPitchLimit: 85 * DEG,
+    /** Aim auto-levels its roll toward the horizon at this rate, 1/s (off while inverted, so loops work). */
+    aimLevelRate: 3.5,
   },
 
   /** Owned by sim/flight.ts. */

@@ -38,9 +38,11 @@ export interface ShipState {
   vel: Vector3;
   /** Ship orientation. */
   quat: Quaternion;
-  /** Aim direction as yaw (about +Y, 0 = facing -Z) and pitch (up positive). */
-  aimYaw: number;
-  aimPitch: number;
+  /**
+   * Aim orientation (forward -Z = where the player wants to go; the camera looks along it).
+   * A free quaternion so loops work; it auto-levels roll unless inverted.
+   */
+  aim: Quaternion;
   /** |vel|, cached each step. */
   speed: number;
   /** Signed bank angle relative to horizon, rad (+ = right wing down). */

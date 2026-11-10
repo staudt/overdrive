@@ -4,3 +4,4 @@ artifacts
 .claude/hooks/.state
 test-results
 *.tsbuildinfo
+.claude/worktrees/

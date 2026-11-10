@@ -7,7 +7,7 @@ import { config } from '../core/config';
 import { mulberry32, type Rng } from '../core/rng';
 import { collideTerrain } from './collision';
 import { collideDummies, spawnDummy, stepDummies } from './dummies';
-import { createShip, stepFlight } from './flight';
+import { createShip, setAim, stepFlight } from './flight';
 import { stepShield } from './shield';
 import type { Dummy, InputFrame, ShipState, SimEvent, Terrain } from './types';
 import { waveHeight } from './waves';
@@ -40,9 +40,7 @@ export class World {
   ) {
     this.rng = mulberry32(config.world.seed + 7);
     this.ship = createShip(opts.shipPos, opts.shipYaw, opts.shipSpeed);
-    if (opts.shipPitch) {
-      this.ship.aimPitch = opts.shipPitch;
-    }
+    if (opts.shipPitch) setAim(this.ship, opts.shipYaw, opts.shipPitch);
     this.dummyCenter = (opts.dummyCenter ?? opts.shipPos).clone();
     const n = opts.dummyCount ?? config.dummies.count;
     for (let i = 0; i < n; i++) this.dummies.push(spawnDummy(i, this.dummyCenter, this.rng));

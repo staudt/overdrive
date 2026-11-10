@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { config } from '../src/core/config';
+import { setAim } from '../src/sim/flight';
 import { World } from '../src/sim/world';
 import { flatSea, fnTerrain, run, v } from './helpers';
 
@@ -14,7 +15,7 @@ describe('stall', () => {
     const y0 = w.ship.pos.y;
     run(w, 0.5, { brake: true });
     expect(w.ship.pos.y).toBeLessThan(y0 - 3);
-    w.ship.aimPitch = -1.2;
+    setAim(w.ship, 0, -1.2);
     run(w, 4);
     expect(w.ship.stalled).toBe(false);
   });
@@ -31,7 +32,7 @@ describe('water spring', () => {
   it('a dive is catapulted back out with upward speed, never too deep', () => {
     const w = new World(flatSea(), { shipPos: v(0, 3, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 80 });
     w.ship.vel.set(0, -40, -69.3);
-    w.ship.aimPitch = -0.52;
+    setAim(w.ship, 0, -0.52);
     w.ship.quat.setFromAxisAngle(v(1, 0, 0), -0.52);
     let entered = false;
     let maxDepth = 0;
@@ -40,7 +41,7 @@ describe('water spring', () => {
     run(w, 3, {}, (t) => {
       if (w.ship.submerged) {
         entered = true;
-        w.ship.aimPitch = 0; // pilot pulls up once under
+        setAim(w.ship, 0, 0); // pilot pulls up once under
       }
       maxDepth = Math.max(maxDepth, w.ship.depth);
       if (entered && !w.ship.submerged && exitT < 0) {
@@ -86,8 +87,7 @@ describe('turning', () => {
   const radius = (inp: { brake?: boolean; boost?: boolean }, warm: number, measure: number) => {
     const w = new World(flatSea(), { shipPos: v(0, 500, 0), shipYaw: 0, dummyCount: 0 });
     const turnInput = () => {
-      w.ship.aimYaw = Math.atan2(-w.ship.vel.x, -w.ship.vel.z) + 1.2;
-      w.ship.aimPitch = 0;
+      setAim(w.ship, Math.atan2(-w.ship.vel.x, -w.ship.vel.z) + 1.2, 0);
       return inp;
     };
     run(w, warm, turnInput);
@@ -116,6 +116,27 @@ describe('turning', () => {
     expect(w.ship.bank).toBeGreaterThan(config.flight.breakBank * 0.85);
     run(w, 1, { left: true });
     expect(w.ship.bank).toBeLessThan(-config.flight.breakBank * 0.85);
+  });
+});
+
+describe('loops', () => {
+  it('pulling the mouse up loops the ship without a half-roll over the top', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 600, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 100 });
+    const right = v(0, 0, 0);
+    let minRightX = 1;
+    let maxUpY = 0;
+    let minUpY = 1;
+    const up = v(0, 0, 0);
+    // ~1.6 rad/s of mouse pitch for 4.5 s is a bit over a full loop of aim.
+    run(w, 4.5, { aimDPitch: 1.6 / 120, throttle: true }, () => {
+      right.set(1, 0, 0).applyQuaternion(w.ship.quat);
+      up.set(0, 1, 0).applyQuaternion(w.ship.quat);
+      minRightX = Math.min(minRightX, right.x);
+      maxUpY = Math.max(maxUpY, up.y);
+      minUpY = Math.min(minUpY, up.y);
+    });
+    expect(minUpY).toBeLessThan(-0.8); // went inverted over the top
+    expect(minRightX).toBeGreaterThan(0.8); // never rolled: right wing stayed right
   });
 });
 

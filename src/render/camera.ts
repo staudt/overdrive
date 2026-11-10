@@ -3,13 +3,13 @@
  * center), sits behind and above the ship. Ship "pulls away" on acceleration and sinks toward
  * the lens on braking via a smoothed-velocity lag. FOV kicks with speed and boost. Shake from trauma.
  */
-import { Euler, PerspectiveCamera, Quaternion, Vector3 } from 'three';
+import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { config } from '../core/config';
 import type { ShipState } from '../sim/types';
 
 const _off = new Vector3();
-const _e = new Euler(0, 0, 0, 'YXZ');
 const _q = new Quaternion();
+const Z = new Vector3(0, 0, 1);
 
 export class ChaseCamera {
   readonly camera: PerspectiveCamera;
@@ -33,10 +33,9 @@ export class ChaseCamera {
     this.time += dt;
     this.smoothVel.lerp(s.vel, 1 - Math.exp(-c.followResponse * dt));
     this.roll += (s.bank * c.rollFollow - this.roll) * (1 - Math.exp(-6 * dt));
-    _e.set(s.aimPitch, s.aimYaw, -this.roll);
-    this.camera.quaternion.setFromEuler(_e);
+    this.camera.quaternion.copy(s.aim).multiply(_q.setFromAxisAngle(Z, -this.roll));
 
-    _off.set(0, c.height, c.distance).applyQuaternion(_q.setFromEuler(_e.set(s.aimPitch, s.aimYaw, 0)));
+    _off.set(0, c.height, c.distance).applyQuaternion(s.aim);
     this.camera.position.copy(s.pos).add(_off);
     // Lag: positive when accelerating (ship pulls ahead).
     this.camera.position.addScaledVector(_off.subVectors(this.smoothVel, s.vel), 0.12);

@@ -3,7 +3,7 @@
  * chases it with a speed-dependent turn-rate cap and auto-banks into the turn.
  * See config.flight for every tunable. Pure: no DOM, no renderer.
  */
-import { Matrix4, Quaternion, Vector3 } from 'three';
+import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import { config } from '../core/config';
 import type { InputFrame, ShipState, SimEvent } from './types';
 
@@ -16,11 +16,14 @@ const _right = new Vector3();
 const _back = new Vector3();
 const _dir = new Vector3();
 const _m = new Matrix4();
+const _q = new Quaternion();
+const _aimUp = new Vector3();
+const _t = new Vector3();
+const X = new Vector3(1, 0, 0);
 
-/** Unit aim direction from yaw (0 = -Z, + = left) and pitch (+ = up). */
-export function aimDirection(yaw: number, pitch: number, out: Vector3): Vector3 {
-  const cp = Math.cos(pitch);
-  return out.set(-Math.sin(yaw) * cp, Math.sin(pitch), -Math.cos(yaw) * cp);
+/** Point the aim at yaw (0 = -Z, + = left) and pitch (+ = up), level. */
+export function setAim(s: ShipState, yaw: number, pitch: number): void {
+  s.aim.setFromEuler(new Euler(pitch, yaw, 0, 'YXZ'));
 }
 
 export function forwardOf(q: Quaternion, out: Vector3): Vector3 {
@@ -38,8 +41,7 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     pos: pos.clone(),
     vel,
     quat,
-    aimYaw: yaw,
-    aimPitch: 0,
+    aim: quat.clone(),
     speed,
     bank: 0,
     turnRate: 0,
@@ -134,7 +136,7 @@ function stepAttitude(s: ShipState, dt: number): void {
   const f = config.flight;
   const auth = authority(s);
   forwardOf(s.quat, _f);
-  aimDirection(s.aimYaw, s.aimPitch, _d);
+  forwardOf(s.aim, _d);
 
   let cap = maxTurnRate(s.speed) * auth;
   if (s.breakTurn !== 0) cap *= f.breakTurnMult;
@@ -158,7 +160,7 @@ function stepAttitude(s: ShipState, dt: number): void {
     _axis.normalize();
     const step = Math.min(s.turnRate * dt, angle);
     _f.applyAxisAngle(_axis, step).normalize();
-    yawRate = _axis.y * s.turnRate; // + = turning left
+    yawRate = _axis.dot(upOf(s.aim, _aimUp)) * s.turnRate; // + = turning left (in the aim frame)
   }
 
   // Bank: auto-bank from yaw rate, or the hard A/D break bank.
@@ -169,13 +171,15 @@ function stepAttitude(s: ShipState, dt: number): void {
   if (s.stalled) desiredBank *= 0.3;
   s.bank += (desiredBank - s.bank) * ease(f.bankResponse, dt);
 
-  // Rebuild orientation from forward + bank around the horizon-projected up.
-  upOf(s.quat, _up);
-  if (Math.abs(_f.y) < 0.985) {
-    // Horizon reference: world up made perpendicular to the nose.
-    _up.copy(UP).addScaledVector(_f, -_f.y).normalize();
+  // Rebuild orientation from forward + bank around the aim's up (so loops stay inverted
+  // over the top instead of half-rolling), projected perpendicular to the nose.
+  upOf(s.aim, _aimUp);
+  const along = _aimUp.dot(_f);
+  if (Math.abs(along) < 0.97) {
+    _up.copy(_aimUp).addScaledVector(_f, -along).normalize();
   } else {
-    // Near vertical, keep the previous up (made perpendicular) to avoid flips.
+    // Nose points along the aim's up (extreme lag): keep the previous up.
+    upOf(s.quat, _up);
     _up.addScaledVector(_f, -_up.dot(_f)).normalize();
   }
   _up.applyAxisAngle(_f, s.bank);
@@ -229,16 +233,31 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
   }
 }
 
+/** Mouse and A/D rotate the aim in its own frame; roll auto-levels unless inverted. */
+function stepAim(s: ShipState, inp: InputFrame, dt: number): void {
+  const f = config.flight;
+  let yaw = inp.aimDYaw;
+  if (s.breakTurn !== 0) yaw -= s.breakTurn * f.breakYawRate * dt * (s.stalled ? f.stallAuthority : 1);
+  if (yaw !== 0) s.aim.multiply(_q.setFromAxisAngle(UP, yaw));
+  if (inp.aimDPitch !== 0) s.aim.multiply(_q.setFromAxisAngle(X, inp.aimDPitch));
+
+  forwardOf(s.aim, _f);
+  upOf(s.aim, _aimUp);
+  if (_aimUp.y > 0 && Math.abs(_f.y) < 0.97) {
+    _t.copy(UP).addScaledVector(_f, -_f.y).normalize();
+    const ang = Math.atan2(_f.dot(_up.crossVectors(_aimUp, _t)), _aimUp.dot(_t));
+    s.aim.premultiply(_q.setFromAxisAngle(_f, ang * ease(f.aimLevelRate, dt)));
+  }
+  s.aim.normalize();
+}
+
 /**
  * One fixed step of player flight (aim, boost, stall, attitude, velocity).
  * Water forces, integration and collision are applied by world.ts after this.
  */
 export function stepFlight(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]): void {
-  const f = config.flight;
-  s.aimYaw += inp.aimDYaw;
-  s.aimPitch = Math.max(-f.aimPitchLimit, Math.min(f.aimPitchLimit, s.aimPitch + inp.aimDPitch));
   s.breakTurn = inp.left === inp.right ? 0 : inp.left ? -1 : 1;
-  if (s.breakTurn !== 0) s.aimYaw -= s.breakTurn * f.breakYawRate * dt * (s.stalled ? f.stallAuthority : 1);
+  stepAim(s, inp, dt);
 
   s.speed = s.vel.length();
   stepBoost(s, inp, dt, events);
