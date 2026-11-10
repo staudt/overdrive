@@ -20,6 +20,8 @@ export class GameAudio {
   private started = false;
   private muted = false;
   private noise: AudioBuffer | null = null;
+  /** Brown (1/f²) noise: energy in the lows, the base for booms, punches and rumbles. */
+  private brown: AudioBuffer | null = null;
 
   private master!: GainNode;
   private muffle!: BiquadFilterNode;
@@ -118,6 +120,18 @@ export class GameAudio {
     return buf;
   }
 
+  private mkBrown(ctx: AudioContext): AudioBuffer {
+    const len = ctx.sampleRate * 3;
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < len; i++) {
+      last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
+      d[i] = last * 3.5;
+    }
+    return buf;
+  }
+
   private noiseSrc(ctx: AudioContext): AudioBufferSourceNode {
     const n = ctx.createBufferSource();
     n.buffer = this.noise;
@@ -149,6 +163,7 @@ export class GameAudio {
 
   private build(ctx: AudioContext): void {
     this.noise = this.mkNoise(ctx);
+    this.brown = this.mkBrown(ctx);
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14;
     comp.knee.value = 10;
@@ -169,8 +184,11 @@ export class GameAudio {
     this.busMissile = this.mkGain(ctx, 1, this.bus);
 
     // Gun mechanical rumble: lowpassed noise, gated by recent gunFire events.
-    const rSrc = this.noiseSrc(ctx);
-    const rLp = this.mkFilter(ctx, 'lowpass', 220, 1.5);
+    // (An AudioBufferSourceNode's buffer can only be set once: build this one directly.)
+    const rSrc = ctx.createBufferSource();
+    rSrc.buffer = this.brown;
+    rSrc.loop = true;
+    const rLp = this.mkFilter(ctx, 'lowpass', 300, 1.2);
     this.rumble = this.mkGain(ctx, 0, this.busGun);
     rSrc.connect(rLp).connect(this.rumble);
     rSrc.start();
@@ -387,9 +405,14 @@ export class GameAudio {
 
   /** Big drone explosion (also scaled down for missile booms). */
   private explosion(k: number): void {
-    this.noiseBurst(this.busSfx, 'lowpass', 5000, 0.8, k, 0.005, 1.6, 80, 2);
-    this.noiseBurst(this.busSfx, 'bandpass', 1500, 0.5, 0.6 * k, 0.002, 0.5, 300);
-    this.tone(this.busSfx, 'sine', 90, 22, 1.4 * k, 1.6, 2);
+    // Punch: a short, saturated low-mid crack that sells the instant of the blast.
+    this.noiseBurst(this.busSfx, 'lowpass', 1800, 0.7, 0.9 * k, 0.002, 0.14, 250, 4, true);
+    // Body: deep brown-noise roar sinking toward the sub range.
+    this.noiseBurst(this.busSfx, 'lowpass', 520, 0.9, 1.5 * k, 0.006, 1.7, 55, 3, true);
+    // Sub drop: felt more than heard.
+    this.tone(this.busSfx, 'sine', 58, 24, 1.5 * k, 1.3, 2);
+    // Rolling tail: slow-swelling low rumble, like thunder after the flash.
+    this.noiseBurst(this.busSfx, 'lowpass', 180, 0.7, 0.8 * k, 0.12, 2.6, 60, 0, true);
   }
 
   private voiceFree(list: number[], cap: number, now: number): boolean {
@@ -401,11 +424,15 @@ export class GameAudio {
     const t = this.ctx!.currentTime;
     this.lastGun = t;
     if (!this.voiceFree(this.gunVoices, 6, t)) return;
-    this.gunVoices.push(t + 0.07);
+    this.gunVoices.push(t + 0.09);
     const v = config.audio.gun;
-    this.noiseBurst(this.busGun, 'bandpass', 2400 + Math.random() * 1200, 0.9, v, 0.001, 0.045, 900, 2);
-    this.tone(this.busGun, 'square', 220 + Math.random() * 40, 70, v * 0.5, 0.04, 2);
-    this.tone(this.busGun, 'sine', 120, 45, v * 0.7, 0.06);
+    const r = Math.random();
+    // Crack: a very short, bright, saturated muzzle report (no resonant band = no "knock").
+    this.noiseBurst(this.busGun, 'highpass', 1500 + r * 500, 0.5, 2.4 * v, 0.0005, 0.04, undefined, 2);
+    // Punch: saturated low-mid blast that sweeps down fast.
+    this.noiseBurst(this.busGun, 'lowpass', 1400 + r * 300, 0.6, 0.7 * v, 0.001, 0.085, 220, 4, true);
+    // Thump: the round leaving the barrel, felt in the chest.
+    this.tone(this.busGun, 'sine', 85 + r * 15, 38, 0.8 * v, 0.07, 2);
   }
 
   private launchWhoosh(): void {
@@ -429,9 +456,11 @@ export class GameAudio {
     this.lastBoom = t;
     this.boomVoices.push(t + 0.7);
     const k = vol * 0.8 * config.audio.explosion;
-    const lp = 400 + 3500 * vol;
-    this.noiseBurst(this.busSfx, 'lowpass', lp, 0.8, k, 0.004, 0.7, 120, 2);
-    this.tone(this.busSfx, 'sine', 100 + Math.random() * 30, 28, k * 1.2, 0.6, 2);
+    // Distance darkens the boom (air absorbs highs); close ones get the crack.
+    const lp = 260 + 900 * vol;
+    if (vol > 0.4) this.noiseBurst(this.busSfx, 'lowpass', 1500, 0.7, k * 0.7, 0.002, 0.1, 250, 4, true);
+    this.noiseBurst(this.busSfx, 'lowpass', lp, 0.8, k * 1.3, 0.005, 0.9, 50, 3, true);
+    this.tone(this.busSfx, 'sine', 62 + Math.random() * 12, 26, k * 1.3, 0.7, 2);
     if (surface === 'water') this.noiseBurst(this.busWater, 'highpass', 3000, 0.5, k * 0.5, 0.03, 0.6);
   }
 
@@ -461,11 +490,12 @@ export class GameAudio {
     decay: number,
     sweepTo?: number,
     drive = 0,
+    brown = false,
   ): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const src = ctx.createBufferSource();
-    src.buffer = this.noise;
+    src.buffer = brown ? this.brown : this.noise;
     const f = this.mkFilter(ctx, type, f0, q);
     if (sweepTo) {
       f.frequency.setValueAtTime(f0, t);
