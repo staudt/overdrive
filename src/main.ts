@@ -17,6 +17,7 @@ import { getScenario } from './sim/scenarios';
 import { createTerrain } from './sim/terrainGen';
 import { World } from './sim/world';
 import { Hud } from './ui/hud';
+import { DebugPanel } from './ui/debugPanel';
 
 const params = new URLSearchParams(window.location.search);
 const scenarioName = params.get('scenario') ?? 'default';
@@ -49,6 +50,7 @@ const dummyView = new DummyView(scene);
 const fx = new Fx(scene, camera);
 const post = new Post(renderer, scene, camera);
 const hud = new Hud(hudRoot);
+new DebugPanel(config);
 const input = new Input(renderer.domElement);
 if (scenario.hold) input.external = scenario.hold;
 
