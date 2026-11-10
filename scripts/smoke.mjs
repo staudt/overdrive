@@ -111,7 +111,11 @@ try {
         await page.goto(`http://localhost:${PORT}/?scenario=${name}&shot`);
         await page.waitForFunction(() => window.__game?.ready === true, null, { timeout: 30000 });
         await page.waitForTimeout(settleMs);
-        const state = await page.evaluate(() => window.__game);
+        // Only plain fields: __game also holds the live world/renderer, which is huge to serialize.
+        const state = await page.evaluate(() => {
+          const g = window.__game;
+          return { ready: g.ready, frames: g.frames, scenario: g.scenario, errors: g.errors };
+        });
         // Sample the pixels from the screenshot itself: drawImage on a WebGL canvas reads back blank
         // once the frame is presented (no preserveDrawingBuffer), so the PNG is the reliable source.
         const shotPath = `${OUT}/${name.replace(/[^a-zA-Z0-9]+/g, '_')}.png`;
