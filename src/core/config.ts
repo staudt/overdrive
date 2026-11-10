@@ -17,7 +17,8 @@ export const config = {
 
   /** Owned by sim/flight.ts. */
   flight: {
-    minSpeed: 15,
+    /** Brake target speed (S held): near a full stop. */
+    minSpeed: 2,
     cruiseSpeed: 70,
     maxSpeed: 110,
     boostSpeed: 300,
@@ -26,7 +27,8 @@ export const config = {
     boostAccel: 260,
     /** Easing back to cruise when W/boost released. */
     settleAccel: 25,
-    brakeDecel: 70,
+    /** Airbrakes: S decelerates this hard, m/s². */
+    brakeDecel: 170,
     /** Diving speeds you up, climbing slows you (fraction of gravity along the nose). */
     slopeGain: 0.5,
     gravity: 18,
@@ -34,7 +36,7 @@ export const config = {
     liftSpeed: 45,
 
     /** Max turn rate (rad/s) by speed: interpolated min → best → max → boost. */
-    turnRateAtMin: 2.0,
+    turnRateAtMin: 2.2,
     turnRateBest: 2.4,
     bestTurnSpeed: 55,
     turnRateAtMax: 1.8,
@@ -59,11 +61,16 @@ export const config = {
     grip: 7,
     gripAtBoost: 3.5,
 
-    stallSpeed: 24,
-    stallTime: 1.2,
-    stallRecoverSpeed: 48,
-    stallAuthority: 0.2,
-    stallNoseDropRate: 1.6,
+    /**
+     * Stall = free fall (Luftrausers): below stallSpeed for stallTime, wings stop flying. Full
+     * steering stays; gravity takes over, the velocity no longer follows the nose (stallGrip),
+     * and thrust (when not braking) pushes along the nose. Recover once speed along the nose
+     * exceeds stallRecoverSpeed (point into the fall, or throttle out).
+     */
+    stallSpeed: 20,
+    stallTime: 0.3,
+    stallRecoverSpeed: 40,
+    stallGrip: 0.25,
 
     /** Soft ceiling: authority and thrust fade over ceilingSoft meters above ceiling. */
     ceiling: 900,

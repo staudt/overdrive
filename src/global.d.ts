@@ -9,6 +9,7 @@ interface OverdriveDebugState {
   config?: typeof import('./core/config').config;
   renderer?: import('three').WebGLRenderer;
   camera?: import('three').PerspectiveCamera;
+  post?: import('./render/post').PostState;
 }
 
 interface Window {

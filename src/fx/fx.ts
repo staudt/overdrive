@@ -59,8 +59,6 @@ const BOOST0 = col(4, 3, 0.6, 1);
 const BOOST1 = col(2, 0.6, 0.05, 0);
 const VAPOR0 = col(0.97, 0.97, 1, 0.5);
 const VAPOR1 = col(1, 1, 1, 0);
-const STALL0 = col(0.1, 0.1, 0.11, 0.75);
-const STALL1 = col(0.35, 0.35, 0.37, 0);
 const BUBBLE0 = col(1.2, 1.9, 2.4, 0.8);
 const BUBBLE1 = col(0.8, 1.4, 1.9, 0);
 const STREAK0 = col(1.6, 1.9, 2.4, 0.55);
@@ -330,18 +328,6 @@ export class Fx {
     this.skimAndWater(dt, world, s);
     this.speedLines(dt, s);
 
-    // Stall sputter.
-    if (s.stalled) {
-      for (let i = 0; i < ship.engines.length; i++) {
-        ship.engines[i]!.getWorldPosition(this.p);
-        for (let n = this.take(8 + i, 28, dt); n > 0; n--) {
-          this.alpha.emit(T, this.p.x, this.p.y, this.p.z, s.vel.x * 0.25 + rnd(-2, 2), s.vel.y * 0.25 + rnd(1, 4), s.vel.z * 0.25 + rnd(-2, 2), rnd(0.9, 1.6), 1, rnd(3, 5), -2, 0.5, 0, STALL0, STALL1);
-        }
-        for (let n = this.take(10 + i, 7, dt); n > 0; n--) {
-          this.add.emit(T, this.p.x, this.p.y, this.p.z, s.vel.x * 0.3 + rnd(-6, 6), s.vel.y * 0.3 + rnd(-2, 6), s.vel.z * 0.3 + rnd(-6, 6), rnd(0.3, 0.6), 0.5, 0.2, 14, 0.5, 0.05, SPARK0, SPARK1);
-        }
-      }
-    }
 
     // Rings.
     for (const r of this.rings) {
@@ -370,8 +356,8 @@ export class Fx {
       this.flames = ship.engines.map((a, i) => new Flame(a, geo, i * 1.7));
     }
     const ts = s.throttleState;
-    const wantLen = s.stalled ? 0.6 : ts === -1 ? 0.8 : ts === 0 ? 3.2 : ts === 1 ? 6 : 13;
-    const wantI = s.stalled ? 0.4 : ts === -1 ? 0.5 : ts === 0 ? 0.9 : ts === 1 ? 1.2 : 1.7;
+    const wantLen = ts === -1 ? 0.8 : ts === 0 ? 3.2 : ts === 1 ? 6 : 13;
+    const wantI = ts === -1 ? 0.5 : ts === 0 ? 0.9 : ts === 1 ? 1.2 : 1.7;
     const k = Math.min(1, dt * 7);
     const glow = config.fx.flameGlow;
     const lenMul = config.fx.flameLength;
@@ -406,7 +392,7 @@ export class Fx {
     for (let i = 0; i < ship.engines.length; i++) {
       ship.engines[i]!.getWorldPosition(this.p);
       const sRate = ts === 2 ? 110 : ts === 1 ? 32 : ts === 0 ? 8 : 0;
-      for (let n = this.take(i, s.stalled ? 0 : sRate, dt); n > 0; n--) {
+      for (let n = this.take(i, sRate, dt); n > 0; n--) {
         this.add.emit(T, this.p.x + rnd(-0.2, 0.2), this.p.y + rnd(-0.2, 0.2), this.p.z + rnd(-0.2, 0.2), s.vel.x * 0.35 + rnd(-2, 2), s.vel.y * 0.35 + rnd(-2, 2), s.vel.z * 0.35 + rnd(-2, 2), rnd(0.35, 0.7), 0.7, 0.3, 0, 1.6, 0.05, BURN0, BURN1);
       }
       if (ts === 2) {

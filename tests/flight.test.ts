@@ -20,6 +20,22 @@ describe('stall', () => {
     expect(w.ship.stalled).toBe(false);
   });
 
+  it('holding S stops the ship fast, then it free-falls with full steering and a level nose', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 600, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 110 });
+    run(w, 0.8, { brake: true });
+    expect(w.ship.speed).toBeLessThan(25); // 110 → near stop in under a second
+    run(w, 0.6, { brake: true });
+    expect(w.ship.stalled).toBe(true);
+    // Turn 90° while falling: the nose follows the aim, and is not forced down.
+    const vy0 = w.ship.vel.y;
+    run(w, 1.2, () => (setAim(w.ship, Math.PI / 2, 0), { brake: true }));
+    const f = v(0, 0, -1).applyQuaternion(w.ship.quat);
+    expect(f.x).toBeLessThan(-0.95); // facing -X (yaw +90° = left)
+    expect(Math.abs(f.y)).toBeLessThan(0.1);
+    expect(w.ship.vel.y).toBeLessThan(vy0 - 15); // gravity is pulling it down
+    expect(w.ship.stalled).toBe(true);
+  });
+
   it('does not stall at cruise', () => {
     const w = new World(flatSea(), { shipPos: v(0, 300, 0), shipYaw: 0, dummyCount: 0 });
     run(w, 5);
@@ -148,18 +164,18 @@ describe('terrain collision', () => {
     // 35° slope rising toward -Z.
     const hill = fnTerrain((_x, z) => Math.max(-60, -z * 0.7));
     const w = new World(hill, { shipPos: v(0, 160, -200), shipYaw: 0, dummyCount: 0, shipSpeed: 10 });
-    w.ship.stalled = true;
-    const pos = v(0, 0, 0);
-    run(w, 4, (t) => {
-      if (t > 3) pos.copy(w.ship.pos);
-      setAim(w.ship, 0, -1.3); // player keeps aiming into the hill
-      return { brake: true };
-    });
-    const p3 = pos.clone();
-    run(w, 1, () => (setAim(w.ship, 0, -1.3), { brake: true }));
-    expect(w.ship.pos.distanceTo(p3)).toBeGreaterThan(8); // still moving, not pinned
-    const nose = v(0, 0, -config.combat.noseLength).applyQuaternion(w.ship.quat).add(w.ship.pos);
-    expect(nose.y).toBeGreaterThan(hill.heightAt(nose.x, nose.z));
+    const noseClear = () => {
+      const nose = v(0, 0, -config.combat.noseLength).applyQuaternion(w.ship.quat).add(w.ship.pos);
+      return nose.y - hill.heightAt(nose.x, nose.z);
+    };
+    // Brake into a stall over the hill, falling onto it while aiming into the slope.
+    run(w, 4, () => (setAim(w.ship, 0, -1.3), { brake: true }), () => expect(noseClear()).toBeGreaterThan(0));
+    expect(w.ship.altitude).toBeLessThan(15); // it did land on the slope
+    // Release S and turn away: the ship must fly off, not stay pinned.
+    const p0 = w.ship.pos.clone();
+    run(w, 1.5, () => (setAim(w.ship, Math.PI, 0.3), { throttle: true }), () => expect(noseClear()).toBeGreaterThan(0));
+    expect(w.ship.pos.distanceTo(p0)).toBeGreaterThan(25);
+    expect(w.ship.stalled).toBe(false);
   });
 
   it('a boosted head-on wall hit bounces back without tunnelling and costs shield', () => {

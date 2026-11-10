@@ -75,7 +75,8 @@ let last = performance.now();
 let acc = 0;
 
 function frame(now: number): void {
-  const dt = Math.min(0.1, (now - last) / 1000);
+  // rAF timestamps can predate the performance.now() taken at startup: never go negative.
+  const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   const step = 1 / config.sim.rate;
   acc += dt;
@@ -113,13 +114,15 @@ function frame(now: number): void {
   forwardOf(s.quat, _nose).multiplyScalar(600).add(s.pos).project(camera);
   hud.update(s, camera, _nose.z < 1 ? { x: _nose.x, y: _nose.y } : null, input.locked || shotMode);
 
-  post.render(dt, {
+  const postState = {
     boost: s.boosting ? 1 : 0,
     shieldLoss: 1 - s.shield / config.combat.shieldMax,
     damageFlash,
     underwater,
     time: world.t,
-  });
+  };
+  window.__game.post = postState;
+  post.render(dt, postState);
   window.__game.frames++;
   requestAnimationFrame(frame);
 }

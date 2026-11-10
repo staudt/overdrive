@@ -114,12 +114,20 @@ function stepBoost(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]
 
 function stepStall(s: ShipState, dt: number, events: SimEvent[]): void {
   const f = config.flight;
-  if (s.speed < f.stallSpeed && !s.submerged) s.stallTimer += dt;
-  else s.stallTimer = Math.max(0, s.stallTimer - 2 * dt);
+  if (s.submerged || s.bounceTimer > 0) {
+    s.stallTimer = 0;
+    if (s.stalled) {
+      s.stalled = false;
+      events.push({ type: 'stallEnd' });
+    }
+    return;
+  }
+  if (s.speed < f.stallSpeed) s.stallTimer += dt;
+  else s.stallTimer = 0;
   if (!s.stalled && s.stallTimer > f.stallTime) {
     s.stalled = true;
     events.push({ type: 'stallStart' });
-  } else if (s.stalled && (s.speed > f.stallRecoverSpeed || s.submerged)) {
+  } else if (s.stalled && s.vel.dot(forwardOf(s.quat, _dir)) > f.stallRecoverSpeed) {
     s.stalled = false;
     s.stallTimer = 0;
     events.push({ type: 'stallEnd' });
@@ -130,7 +138,6 @@ function stepStall(s: ShipState, dt: number, events: SimEvent[]): void {
 function authority(s: ShipState): number {
   const f = config.flight;
   let a = 1;
-  if (s.stalled) a *= f.stallAuthority;
   if (s.submerged) a *= config.water.authority;
   const over = (s.pos.y - f.ceiling) / f.ceilingSoft;
   if (over > 0) a *= 1 - 0.8 * Math.min(1, over);
@@ -150,10 +157,6 @@ function stepAttitude(s: ShipState, dt: number): void {
     // Just bounced off terrain: follow the rebound so the nose can't dig back in.
     _d.copy(s.vel).normalize();
     cap = Math.max(cap, f.turnRateBest * 1.5);
-  } else if (s.stalled) {
-    // Nose drops: target mostly straight down, with a little player authority left.
-    _d.multiplyScalar(f.stallAuthority).addScaledVector(UP, -(1 - f.stallAuthority)).normalize();
-    cap = Math.max(cap, f.stallNoseDropRate);
   } else if (s.submerged && s.speed > 1) {
     // Underwater the hull weathervanes into its motion, like a dolphin.
     _dir.copy(s.vel).normalize();
@@ -174,11 +177,10 @@ function stepAttitude(s: ShipState, dt: number): void {
   }
 
   // Bank: auto-bank from yaw rate, or the hard A/D break bank.
-  let desiredBank =
+  const desiredBank =
     s.breakTurn !== 0
       ? s.breakTurn * f.breakBank
       : Math.max(-f.maxAutoBank, Math.min(f.maxAutoBank, -yawRate * f.bankGain));
-  if (s.stalled) desiredBank *= 0.3;
   s.bank += (desiredBank - s.bank) * ease(f.bankResponse, dt);
 
   // Rebuild orientation from forward + bank around the aim's up (so loops stay inverted
@@ -208,7 +210,15 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
   if (speed > 1e-3) _dir.copy(s.vel).divideScalar(speed);
   else _dir.copy(_f);
 
-  if (!s.submerged) {
+  if (s.stalled && !s.submerged) {
+    // Free fall: ballistic velocity, thrust along the nose unless braking.
+    if (!inp.brake) s.vel.addScaledVector(_f, (s.boosting ? f.boostAccel : f.accel) * dt);
+    _dir.copy(s.vel).normalize();
+    const sp = s.vel.length();
+    _dir.lerp(_f, ease(f.stallGrip, dt)).normalize();
+    s.vel.copy(_dir).multiplyScalar(sp);
+    s.vel.y -= f.gravity * dt;
+  } else if (!s.submerged) {
     let target = f.cruiseSpeed;
     let up = f.accel;
     let down = f.settleAccel;
@@ -224,7 +234,6 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
     if (s.skimming) target *= config.water.skimSpeedMul;
     const over = (s.pos.y - f.ceiling) / f.ceilingSoft;
     if (over > 0) up *= Math.max(0, 1 - over);
-    if (s.stalled) down = 0; // never fight the fall that recovers you
     let ns = speed + Math.max(-down * dt, Math.min(up * dt, target - speed));
     // Diving builds speed, climbing bleeds it.
     ns += -_f.y * f.gravity * f.slopeGain * dt;
@@ -234,12 +243,11 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
     const fast = Math.max(0, Math.min(1, (speed - f.maxSpeed) / (f.boostSpeed - f.maxSpeed)));
     let grip = f.grip + (f.gripAtBoost - f.grip) * fast;
     if (s.breakTurn !== 0) grip = Math.min(grip, f.breakGrip);
-    if (s.stalled) grip *= f.stallAuthority;
     _dir.lerp(_f, ease(grip, dt)).normalize();
     s.vel.copy(_dir).multiplyScalar(ns);
 
-    // Gravity only bites when slow (or stalled).
-    const g = s.stalled ? 1 : Math.max(0, 1 - ns / f.liftSpeed);
+    // Gravity only bites when slow.
+    const g = Math.max(0, 1 - ns / f.liftSpeed);
     s.vel.y -= f.gravity * g * dt;
   }
 }
@@ -248,7 +256,7 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
 function stepAim(s: ShipState, inp: InputFrame, dt: number): void {
   const f = config.flight;
   let yaw = inp.aimDYaw;
-  if (s.breakTurn !== 0) yaw -= s.breakTurn * f.breakYawRate * dt * (s.stalled ? f.stallAuthority : 1);
+  if (s.breakTurn !== 0) yaw -= s.breakTurn * f.breakYawRate * dt;
   if (yaw !== 0) s.aim.multiply(_q.setFromAxisAngle(UP, yaw));
   if (inp.aimDPitch !== 0) s.aim.multiply(_q.setFromAxisAngle(X, inp.aimDPitch));
 

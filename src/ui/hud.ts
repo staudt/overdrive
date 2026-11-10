@@ -219,7 +219,7 @@ export class Hud {
     this.nose = new Toggle(this.noseNode, 'on');
 
     const stall = make('div', 'stall');
-    stall.append(make('div', 'big', 'STALL'), make('div', 'sub', 'DIVE TO RECOVER'));
+    stall.append(make('div', 'big', 'FREE FALL'), make('div', 'sub', 'RELEASE S TO FLY'));
     this.stall = new Toggle(stall, 'on');
 
     const under = make('div', 'under', 'UNDERWATER');

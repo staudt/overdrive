@@ -146,20 +146,21 @@ function gradientMap(): DataTexture {
   return t;
 }
 
+/** Wide cranked delta (concept art): span ~17 m. */
 const WING: [number, number][] = [
-  [0.8, -3.6],
-  [3.0, -0.6],
-  [5.6, 3.0],
-  [5.6, 4.3],
-  [0.8, 5.2],
+  [0.8, -4.2],
+  [3.2, -0.9],
+  [8.5, 3.3],
+  [8.5, 4.6],
+  [0.8, 5.4],
 ];
 const STRIPE: [number, number][] = [
-  [0.8, -3.6],
-  [3.0, -0.6],
-  [5.6, 3.0],
-  [5.6, 3.7],
-  [3.1, 0.3],
-  [0.8, -2.7],
+  [0.8, -4.2],
+  [3.2, -0.9],
+  [8.5, 3.3],
+  [8.5, 4.0],
+  [3.3, 0.0],
+  [0.8, -3.3],
 ];
 
 export function createShipModel(): ShipModel {
@@ -238,7 +239,7 @@ export function createShipModel(): ShipModel {
   redParts.push(...both(slab(STRIPE, 0.22, -0.15)));
 
   // Roundel on the right wing.
-  const disc = (r: number, y: number) => flat(new CircleGeometry(r, 14).rotateX(-Math.PI / 2).translate(3.9, y, 2.6));
+  const disc = (r: number, y: number) => flat(new CircleGeometry(r, 14).rotateX(-Math.PI / 2).translate(5.2, y, 2.9));
   redParts.push(disc(0.7, 0.01));
   whiteParts.push(disc(0.42, 0.03));
   redParts.push(disc(0.2, 0.05));
@@ -272,10 +273,10 @@ export function createShipModel(): ShipModel {
   const elevon = (sx: number) => {
     const g = slab(
       [
-        [0.9, 0.5],
-        [5.4, -0.2],
-        [5.4, 0.7],
-        [0.9, 1.4],
+        [0.9, 0.7],
+        [8.3, 0.1],
+        [8.3, 0.9],
+        [0.9, 1.5],
       ],
       0.12,
       -0.15,
@@ -283,6 +284,20 @@ export function createShipModel(): ShipModel {
     return animated(sx < 0 ? mirrorX(g) : g, red, 0, 0, 4.4);
   };
   const elevons = [elevon(-1), elevon(1)];
+
+  // Airbrakes: red panels on the spine, hinged at the front, flip up while braking (S).
+  const airbrakeGeo = slab(
+    [
+      [0.15, 0],
+      [1.05, 0],
+      [0.95, 1.9],
+      [0.15, 1.9],
+    ],
+    0.08,
+    0,
+  );
+  const airbrakes = [-1, 1].map((sx) => animated(sx < 0 ? mirrorX(airbrakeGeo) : airbrakeGeo, red, 0, 0.82, 2.4));
+  let brake = 0;
 
   // Canards.
   const canard = (sx: number) => {
@@ -368,7 +383,7 @@ export function createShipModel(): ShipModel {
 
   const wingtips = [-1, 1].map((sx) => {
     const o = new Object3D();
-    o.position.set(sx * 5.6, -0.05, 3.9);
+    o.position.set(sx * 8.5, -0.05, 4.0);
     group.add(o);
     return o;
   });
@@ -414,15 +429,11 @@ export function createShipModel(): ShipModel {
       tails[0]!.rotation.y = yawCue;
       tails[1]!.rotation.y = yawCue;
 
-      if (s.stalled) {
-        rig.rotation.z = Math.sin(t * 17) * 0.04;
-        rig.rotation.x = Math.sin(t * 23) * 0.03;
-        rig.position.y = Math.sin(t * 31) * 0.06;
-      } else {
-        rig.rotation.z *= 0.8;
-        rig.rotation.x *= 0.8;
-        rig.position.y *= 0.8;
-      }
+      brake += ((s.throttleState === -1 ? 1 : 0) - brake) * Math.min(1, dt * 12);
+      airbrakes[0]!.rotation.set(-1.1 * brake, 0, 0.35 * brake);
+      airbrakes[1]!.rotation.set(-1.1 * brake, 0, -0.35 * brake);
+      elevons[0]!.rotation.x += -0.5 * brake;
+      elevons[1]!.rotation.x += -0.5 * brake;
     },
   };
 }
