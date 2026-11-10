@@ -86,21 +86,27 @@ export const config = {
   /** Owned by sim/water.ts + sim/waves.ts (render/ocean.ts must use the same wave params). */
   water: {
     /**
-     * Dive: entering steeper than minDiveAngle goes under; a spring (upward accel =
-     * k * depth - damping * vel.y) turns you around and you exit at the mirrored angle with
-     * exitSpeedMul * entry speed. k = max(buoyancyK, (entry vertical speed / maxDepth)²).
+     * Dive: entering steeper than minDiveAngle goes under; a constant upward push (riseAccel)
+     * turns you around and you exit at the mirrored angle with exitSpeedMul * entry speed.
+     * Depth = vy²/(2a) and time under = 2·vy/a, so steeper/faster dives go deeper and stay
+     * down longer. The push is raised just enough to keep depth <= maxDepth.
      */
-    minDiveAngle: 12 * DEG,
-    buoyancyK: 25,
-    damping: 1.0,
-    maxDepth: 30,
+    minDiveAngle: 25 * DEG,
+    riseAccel: 100,
+    maxDepth: 50,
     /** Horizontal velocity drag underwater, 1/s. */
     drag: 0.8,
     exitSpeedMul: 1.0,
     /** How fast the aim flips to the mirrored exit angle while under, 1/s. */
     aimFlipRate: 9,
     /** Shallow contacts ride the surface at this height (ship center above the wave), m. */
-    hoverHeight: 1.4,
+    hoverHeight: 2.0,
+    /** Still counts as skimming (spray, slowdown) this far above hoverHeight, m. */
+    skimGrace: 1.5,
+    /** While skimming, the speed target is scaled by this (a small fixed loss, not a drag). */
+    skimSpeedMul: 0.88,
+    /** Camera stays at least this far above the waves, m. */
+    cameraClearance: 1.5,
     /** Steering authority underwater. */
     authority: 0.45,
     /** Skim height for spray wake, m. */

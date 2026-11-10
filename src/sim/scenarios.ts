@@ -14,7 +14,7 @@ export const yawToward = (x0: number, z0: number, x1: number, z1: number) => Mat
 
 export const scenarios: Record<string, (t: Terrain) => Scenario> = {
   default: () => ({ world: { shipPos: new Vector3(0, 120, 600), shipYaw: 0 } }),
-  'low-water': () => ({ world: { shipPos: new Vector3(0, 7, 600), shipYaw: 0, shipSpeed: 95 } }),
+  'low-water': () => ({ world: { shipPos: new Vector3(0, 2.5, 600), shipYaw: 0, shipSpeed: 95, shipPitch: -0.08 } }),
   'canyon-run': (t) => {
     const [a, b] = t.canyonPath;
     const [x0, z0] = a!;

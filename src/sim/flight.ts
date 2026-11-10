@@ -55,7 +55,7 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     submerged: false,
     diveSpeed: 0,
     diveAngle: 0,
-    diveK: config.water.buoyancyK,
+    diveAccel: config.water.riseAccel,
     diveAim: quat.clone(),
     skimming: false,
     bounceTimer: 0,
@@ -221,6 +221,7 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
     } else if (inp.throttle) {
       target = f.maxSpeed;
     }
+    if (s.skimming) target *= config.water.skimSpeedMul;
     const over = (s.pos.y - f.ceiling) / f.ceilingSoft;
     if (over > 0) up *= Math.max(0, 1 - over);
     if (s.stalled) down = 0; // never fight the fall that recovers you

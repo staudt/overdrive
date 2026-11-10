@@ -68,15 +68,17 @@ describe('dive mirror bounce', () => {
     let enter: { speed: number; angle: number } | null = null;
     let exit: { speed: number; angle: number } | null = null;
     let maxDepth = 0;
-    run(w, 3, {}, () => {
+    let under = 0;
+    run(w, 4, {}, () => {
       maxDepth = Math.max(maxDepth, w.ship.depth);
+      if (w.ship.submerged) under += 1 / 120;
       for (const e of w.drainEvents()) {
         const sp = w.ship.vel.length();
         if (e.type === 'waterEnter' && !enter) enter = { speed: sp, angle: Math.asin(-w.ship.vel.y / sp) };
         if (e.type === 'waterExit' && !exit) exit = { speed: sp, angle: Math.asin(w.ship.vel.y / sp) };
       }
     });
-    return { enter: enter!, exit: exit!, maxDepth, w };
+    return { enter: enter!, exit: exit!, maxDepth, w, under };
   };
 
   it('45° dive exits at 45° up with the entry speed', () => {
@@ -87,6 +89,19 @@ describe('dive mirror bounce', () => {
     expect(maxDepth).toBeLessThan(config.water.maxDepth + 5);
     expect(Math.abs(exit.angle - enter.angle)).toBeLessThan(0.05);
     expect(Math.abs(exit.speed - enter.speed) / enter.speed).toBeLessThan(0.03);
+  });
+
+  it('steeper dives go deeper and stay under longer', () => {
+    const shallow = dive(30, 100);
+    const steep = dive(60, 100);
+    expect(steep.maxDepth).toBeGreaterThan(shallow.maxDepth * 1.5);
+    expect(steep.under).toBeGreaterThan(shallow.under * 1.3);
+    expect(steep.under).toBeGreaterThan(1.2);
+  });
+
+  it('a 20° contact is not a dive', () => {
+    const { enter } = dive(20, 100);
+    expect(enter).toBeFalsy();
   });
 
   it('the aim flips up with the launch, so the ship keeps climbing', () => {
@@ -113,6 +128,18 @@ describe('dive mirror bounce', () => {
       if (w.ship.skimming) skimmed = true;
     });
     expect(skimmed).toBe(true);
+  });
+
+  it('skimming costs a small fixed amount of speed, not a growing drag', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 2, 0), shipYaw: 0, dummyCount: 0, shipSpeed: 70 });
+    setAim(w.ship, 0, -0.1);
+    run(w, 3, () => (setAim(w.ship, 0, -0.1), {}));
+    const s3 = w.ship.speed;
+    run(w, 3, () => (setAim(w.ship, 0, -0.1), {}));
+    expect(w.ship.skimming).toBe(true);
+    expect(s3).toBeLessThan(config.flight.cruiseSpeed * 0.95);
+    expect(s3).toBeGreaterThan(config.flight.cruiseSpeed * 0.8);
+    expect(Math.abs(w.ship.speed - s3)).toBeLessThan(1);
   });
 });
 

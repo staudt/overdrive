@@ -15,6 +15,7 @@ import { TerrainView } from './render/terrainView';
 import { forwardOf } from './sim/flight';
 import { getScenario } from './sim/scenarios';
 import { createTerrain } from './sim/terrainGen';
+import { waveHeight } from './sim/waves';
 import { World } from './sim/world';
 import { Hud } from './ui/hud';
 import { DebugPanel } from './ui/debugPanel';
@@ -69,7 +70,7 @@ function resize(): void {
 }
 window.addEventListener('resize', resize);
 
-chase.snap(world.ship);
+chase.snap(world.ship, world.t);
 let last = performance.now();
 let acc = 0;
 
@@ -102,8 +103,8 @@ function frame(now: number): void {
   chase.zoom(input.takeWheel());
   chase.trauma = Math.min(1, chase.trauma + fx.trauma);
   fx.trauma = 0;
-  chase.update(dt, s);
-  const underwater = camera.position.y < 0;
+  chase.update(dt, s, world.t);
+  const underwater = camera.position.y < waveHeight(camera.position.x, camera.position.z, world.t);
   sky.update(camera, world.t);
   ocean.update(camera, world.t, underwater);
   terrainView.update(camera);

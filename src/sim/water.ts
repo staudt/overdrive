@@ -23,21 +23,29 @@ export function stepWater(s: ShipState, dt: number, t: number, events: SimEvent[
   const w = config.water;
   const surface = waveHeight(s.pos.x, s.pos.z, t);
   s.depth = surface - s.pos.y;
+  const wasSkimming = s.skimming;
   s.skimming = false;
 
   if (!s.submerged) {
-    if (s.depth <= -w.hoverHeight) return;
+    if (s.depth <= -w.hoverHeight) {
+      // Just above the ride height (waves dropping away): still skimming, no clamp.
+      s.skimming = wasSkimming && s.depth > -w.hoverHeight - w.skimGrace;
+      return;
+    }
     // Touching the surface: dive or skim?
     const speed = s.vel.length();
     const velAngle = speed > 1 ? descent(s.vel) : 0;
     const noseAngle = descent(forwardOf(s.quat, _f));
-    const angle = Math.max(velAngle, noseAngle);
-    if (angle > w.minDiveAngle && (s.vel.y < 0 || s.stalled)) {
+    // Dive only on a decent descent. While riding the surface the velocity is held flat, so
+    // there the nose decides (pitch down past the same angle to break through).
+    const angle = wasSkimming ? Math.max(velAngle, noseAngle) : velAngle;
+    if (angle > w.minDiveAngle && (s.vel.y < 0 || s.stalled || wasSkimming)) {
       s.submerged = true;
       s.diveSpeed = speed;
-      s.diveAngle = Math.max(w.minDiveAngle, velAngle);
-      const vy = Math.max(1, -s.vel.y);
-      s.diveK = Math.max(w.buoyancyK, (vy / w.maxDepth) ** 2);
+      s.diveAngle = Math.max(w.minDiveAngle, angle);
+      const vy = Math.max(1, -s.vel.y, Math.sin(angle) * speed);
+      if (s.vel.y > -vy) s.vel.y = -vy; // breaking through from a skim: go in at the nose angle
+      s.diveAccel = Math.max(w.riseAccel, (vy * vy) / (2 * w.maxDepth));
       // Aim target: same heading, mirrored pitch.
       _h.copy(s.vel).setY(0);
       if (_h.lengthSq() < 1e-6) _h.copy(_f).setY(0);
@@ -55,9 +63,8 @@ export function stepWater(s: ShipState, dt: number, t: number, events: SimEvent[
     }
   }
 
-  // Underwater: spring back up, drag horizontally, flip the aim toward the exit angle.
-  const d = Math.max(0, s.depth);
-  s.vel.y += (s.diveK * d - w.damping * s.vel.y) * dt;
+  // Underwater: constant push back up, drag horizontally, flip the aim toward the exit angle.
+  s.vel.y += s.diveAccel * dt;
   const k = Math.exp(-w.drag * dt);
   s.vel.x *= k;
   s.vel.z *= k;

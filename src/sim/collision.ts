@@ -31,7 +31,8 @@ function bounce(s: ShipState, n: Vector3, at: Vector3, events: SimEvent[]): void
   s.stalled = false;
   s.stallTimer = 0;
   if (impact > 0.5) {
-    damageShield(s, impact * c.terrainDamagePerMps);
+    // The seabed just turns a dive around; it never costs shield.
+    if (!s.submerged) damageShield(s, impact * c.terrainDamagePerMps);
     events.push({ type: 'terrainHit', pos: at.clone(), normal: n.clone(), impact });
   }
 }

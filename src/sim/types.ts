@@ -59,10 +59,10 @@ export interface ShipState {
   /** Depth below the wave surface (positive = underwater). */
   depth: number;
   submerged: boolean;
-  /** Dive bookkeeping: speed and angle (rad below horizontal) at entry, spring stiffness used. */
+  /** Dive bookkeeping: speed and angle (rad below horizontal) at entry, upward push used (m/s²). */
   diveSpeed: number;
   diveAngle: number;
-  diveK: number;
+  diveAccel: number;
   /** Aim the dive flips toward (the entry angle mirrored upward). */
   diveAim: Quaternion;
   /** Riding the surface after a too-shallow contact (no dive). */

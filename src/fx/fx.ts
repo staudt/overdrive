@@ -468,6 +468,26 @@ export class Fx {
         const side = Math.random() < 0.5 ? -1 : 1;
         this.add.emit(T, px - this.dir.x * 2, surf + 0.5, pz - this.dir.z * 2, s.vel.x * 0.2 + this.rgt.x * side * rnd(3, 12), rnd(6, 16), s.vel.z * 0.2 + this.rgt.z * side * rnd(3, 12), rnd(0.6, 1.2), 0.5, 0.3, 20, 0.3, 0.04, DROP0, DROP1);
       }
+      // Hovering on the water: huge sheets of water thrown out to both sides.
+      if (s.skimming) {
+        const big = clamp(sp / 80, 0.6, 2.5);
+        for (let n = this.take(18, 520 * big, dt); n > 0; n--) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const back = rnd(-2, 6);
+          const out = rnd(14, 38) * big;
+          this.alpha.emit(T, px + this.rgt.x * side * rnd(2, 4) - this.dir.x * back, surf + 0.3, pz + this.rgt.z * side * rnd(2, 4) - this.dir.z * back, s.vel.x * 0.35 + this.rgt.x * side * out, rnd(9, 22) * (0.6 + 0.4 * big), s.vel.z * 0.35 + this.rgt.z * side * out, rnd(1.1, 1.9), 2.5 * big, rnd(7, 13) * big, 24, 0.45, 0, WATER0, WATER1);
+        }
+        // Glittering droplets on top of the sheets.
+        for (let n = this.take(19, 260 * big, dt); n > 0; n--) {
+          const side = Math.random() < 0.5 ? -1 : 1;
+          const out = rnd(10, 32) * big;
+          this.add.emit(T, px + this.rgt.x * side * 3, surf + 0.6, pz + this.rgt.z * side * 3, s.vel.x * 0.3 + this.rgt.x * side * out, rnd(10, 26), s.vel.z * 0.3 + this.rgt.z * side * out, rnd(0.7, 1.3), 0.7, 0.4, 24, 0.3, 0.05, DROP0, DROP1);
+        }
+        // Tall rooster tail behind.
+        for (let n = this.take(20, 160 * big, dt); n > 0; n--) {
+          this.alpha.emit(T, px - this.dir.x * 7 + rnd(-1.5, 1.5), surf + 0.3, pz - this.dir.z * 7 + rnd(-1.5, 1.5), s.vel.x * 0.4 + rnd(-4, 4), rnd(14, 32) * (0.6 + 0.4 * big), s.vel.z * 0.4 + rnd(-4, 4), rnd(1.2, 2), 3, rnd(8, 14) * big, 18, 0.25, 0, WATER0, WATER1);
+        }
+      }
       // Foam wake left on the surface.
       for (let n = this.take(12, sp / 3.5 * q, dt); n > 0; n--) {
         const o = rnd(-2, 2);

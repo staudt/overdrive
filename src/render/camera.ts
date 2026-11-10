@@ -8,6 +8,7 @@
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three';
 import { config } from '../core/config';
 import type { ShipState } from '../sim/types';
+import { waveHeight } from '../sim/waves';
 
 const _off = new Vector3();
 const _q = new Quaternion();
@@ -34,12 +35,13 @@ export class ChaseCamera {
     c.distance = Math.max(c.minDistance, Math.min(c.maxDistance, d));
   }
 
-  snap(s: ShipState): void {
+  snap(s: ShipState, t = 0): void {
     this.smoothVel.copy(s.vel);
-    this.update(0, s);
+    this.update(0, s, t);
   }
 
-  update(dt: number, s: ShipState): void {
+  /** t: world time, for keeping the camera above the waves. */
+  update(dt: number, s: ShipState, t = 0): void {
     const c = config.camera;
     this.time += dt;
     this.smoothVel.lerp(s.vel, 1 - Math.exp(-c.followResponse * dt));
@@ -65,6 +67,10 @@ export class ChaseCamera {
       this.camera.position.y += Math.sin(t * 1.7 + 1) * sh * 1.5;
       this.camera.rotateZ(Math.sin(t * 1.1 + 2) * sh * 0.05);
     }
+
+    // Never under the water: the ship dives, the camera rides the surface.
+    const p = this.camera.position;
+    p.y = Math.max(p.y, waveHeight(p.x, p.z, t) + config.water.cameraClearance);
 
     if (Math.abs(this.camera.fov - this.fov) > 0.01) {
       this.camera.fov = this.fov;

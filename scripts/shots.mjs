@@ -14,7 +14,7 @@ import { chromium } from 'playwright-core';
 const SHOTS = {
   boost: { scenario: 'default', steps: [[0, {}], [500, { boost: true }], [650, null, true], [1500, null, true], [2300, { boost: true, right: true }], [2700, null, true]] },
   skim: { scenario: 'low-water', steps: [[0, { throttle: true }], [1500, null, true], [2500, { boost: true }], [3500, null, true]] },
-  dive: { scenario: 'dive-test', steps: [[0, {}], [1400, null, true], [1700, null, true], [2000, null, true], [2300, null, true], [2700, null, true], [3200, null, true]] },
+  dive: { scenario: 'dive-test', steps: [[0, {}], [2100, null, true], [2500, null, true], [2900, null, true], [3300, null, true], [3700, null, true], [4300, null, true]] },
   stall: { scenario: 'stall-test', steps: [[0, { brake: true }], [3500, null, true], [5000, null, true]] },
   ram: { scenario: 'dummies', steps: [[0, { throttle: true }], [2500, null, true]] },
   canyon: { scenario: 'canyon-run', steps: [[0, { throttle: true }], [2500, null, true], [4000, { left: true }], [4800, null, true]] },
