@@ -42,7 +42,7 @@ const scene = new Scene();
 const chase = new ChaseCamera(window.innerWidth / window.innerHeight);
 const camera = chase.camera;
 const sky = new Sky(scene);
-const ocean = new Ocean(scene);
+const ocean = new Ocean(scene, terrain);
 const terrainView = new TerrainView(scene, terrain);
 const ship = createShipModel();
 scene.add(ship.group);
