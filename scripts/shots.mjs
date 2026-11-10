@@ -12,6 +12,8 @@ import { chromium } from 'playwright-core';
 
 /** timeline: [atMs, inputOverride | null, snap?] */
 const SHOTS = {
+  gun: { scenario: 'dummies', steps: [[0, { throttle: true }], [2500, { fire: true }], [3000, null, true], [4200, null, true], [5200, { fire: true, right: true }], [5600, null, true]] },
+  missiles: { scenario: 'dummies', steps: [[0, { throttle: true }], [2000, { missile: true }], [2400, null, true], [3200, null, true], [4400, {}], [4600, null, true], [5600, null, true]] },
   boost: { scenario: 'default', steps: [[0, {}], [500, { boost: true }], [650, null, true], [1500, null, true], [2300, { boost: true, right: true }], [2700, null, true]] },
   skim: { scenario: 'low-water', steps: [[0, { throttle: true }], [1500, null, true], [2500, { boost: true }], [3500, null, true]] },
   dive: { scenario: 'dive-test', steps: [[0, {}], [2100, null, true], [2500, null, true], [2900, null, true], [3300, null, true], [3700, null, true], [4300, null, true]] },
