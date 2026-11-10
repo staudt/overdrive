@@ -194,9 +194,33 @@ export class Fx {
         this.trauma = Math.min(1, this.trauma + e.impact / 60);
         break;
       case 'ram':
-        this.ram(e.pos, e.impact, e.killed);
-        this.trauma = Math.min(1, this.trauma + (e.killed ? 0.9 : 0.4));
+        this.ram(e.pos, e.impact);
+        this.trauma = Math.min(1, this.trauma + 0.4);
         break;
+      case 'gunFire':
+        this.muzzle(e.pos, e.dir);
+        break;
+      case 'bulletImpact':
+        this.bulletImpact(e.pos, e.surface, world.t);
+        break;
+      case 'hit':
+        if (e.by !== 'ram') this.hitSparks(e.pos, e.by === 'missile');
+        break;
+      case 'missileLaunch':
+        this.launchPuff(e.pos);
+        break;
+      case 'missileExplode': {
+        this.missileBoom(e.pos, e.surface, world.t);
+        const d = e.pos.distanceTo(world.ship.pos);
+        this.trauma = Math.min(1, this.trauma + 0.12 * clamp(1 - d / 350, 0, 1));
+        break;
+      }
+      case 'kill': {
+        this.bigBoom(e.pos, 1);
+        const d = e.pos.distanceTo(world.ship.pos);
+        this.trauma = Math.min(1, this.trauma + 0.2 + 0.25 * clamp(1 - d / 300, 0, 1));
+        break;
+      }
       case 'boostStart':
         this.boostBurst(world);
         this.trauma = Math.min(1, this.trauma + 0.35);
@@ -278,7 +302,7 @@ export class Fx {
     this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.22, 5 * k + 3, 14 * k + 4, 0, 0.1, 0, FLASH0, FLASH1);
   }
 
-  private ram(pos: Vector3, impact: number, killed: boolean): void {
+  private ram(pos: Vector3, impact: number): void {
     const k = clamp(impact / 60, 0.5, 2);
     const d = config.fx.density;
     const T = this.time;
@@ -293,21 +317,109 @@ export class Fx {
       this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(1.2, 2), 1, 0.7, 20, 0.3, 0, ROCK0, ROCK1);
     }
     this.ring(pos.x, pos.y, pos.z, 26, 0.45, true, new Color(1.6, 1.3, 0.8));
-    if (!killed) return;
-    // Orange fireball with black smoke.
-    for (let i = 0, n = Math.floor(34 * d); i < n; i++) {
-      this.rsph(v).multiplyScalar(rnd(2, 22));
-      this.alpha.emit(T, pos.x + v.x * 0.1, pos.y + v.y * 0.1, pos.z + v.z * 0.1, v.x, v.y, v.z, rnd(1.0, 1.8), 5, rnd(16, 28), -2, 1.8, 0, FIRE0, FIRE1);
+  }
+
+
+  /** Orange fireball with black smoke and a shockwave ring. k scales size (1 = drone kill). */
+  private bigBoom(pos: Vector3, k: number): void {
+    const d = config.fx.density * k;
+    const T = this.time;
+    const v = this.e0;
+    const dd = Math.max(0.5, k);
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.2, 14 * k, 34 * k, 0, 0.1, 0, FLASH0, FLASH1);
+    for (let i = 0, n = Math.ceil(34 * d); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(2, 22) * k);
+      this.alpha.emit(T, pos.x + v.x * 0.1, pos.y + v.y * 0.1, pos.z + v.z * 0.1, v.x, v.y, v.z, rnd(1.0, 1.8), 5 * k, rnd(16, 28) * k, -2, 1.8, 0, FIRE0, FIRE1);
     }
-    for (let i = 0, n = Math.floor(20 * d); i < n; i++) {
-      this.rsph(v).multiplyScalar(rnd(1, 14));
-      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.4, 0.8), 10, rnd(22, 34), 0, 2, 0, GLOW0, GLOW1);
+    for (let i = 0, n = Math.ceil(20 * d); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(1, 14) * k);
+      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.4, 0.8), 10 * k, rnd(22, 34) * k, 0, 2, 0, GLOW0, GLOW1);
     }
-    for (let i = 0, n = Math.floor(16 * d); i < n; i++) {
-      this.rsph(v).multiplyScalar(rnd(2, 15));
-      this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(2, 3.6), 6, rnd(18, 32), -4, 1.2, 0, BLACK0, BLACK1);
+    for (let i = 0, n = Math.ceil(16 * d); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(2, 15) * k);
+      this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(2, 3.6), 6 * k, rnd(18, 32) * k, -4, 1.2, 0, BLACK0, BLACK1);
     }
-    this.ring(pos.x, pos.y, pos.z, 60, 0.7, true, new Color(1.2, 0.9, 0.7));
+    for (let i = 0, n = Math.ceil(30 * d * dd); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(20, 80) * Math.sqrt(k));
+      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.4, 1.0), 0.6, 0.4, 20, 0.5, 0.05, i % 3 === 0 ? HOTSPARK0 : SPARK0, SPARK1);
+    }
+    if (k >= 0.9) {
+      for (let i = 0, n = Math.ceil(14 * d); i < n; i++) {
+        this.rsph(v).multiplyScalar(rnd(10, 40));
+        this.alpha.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(1.2, 2), 1, 0.7, 20, 0.3, 0, ROCK0, ROCK1);
+      }
+    }
+    this.ring(pos.x, pos.y, pos.z, 60 * k, 0.7, true, new Color(1.2, 0.9, 0.7));
+  }
+
+  private muzzle(pos: Vector3, dir: Vector3): void {
+    const T = this.time;
+    const d = config.fx.density;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.06, 2.6, 0.8, 0, 0.1, 0, col(6, 4.4, 2, 0.95), col(3, 1.2, 0.3, 0));
+    this.add.emit(T, pos.x, pos.y, pos.z, dir.x * 90, dir.y * 90, dir.z * 90, 0.05, 1.1, 0.4, 0, 0.1, 0.06, col(7, 6, 3.5, 1), col(3, 1, 0.2, 0));
+    for (let n = 0; n < 2 * d; n++) {
+      this.add.emit(T, pos.x, pos.y, pos.z, dir.x * 60 + rnd(-30, 30), dir.y * 60 + rnd(-30, 30), dir.z * 60 + rnd(-30, 30), rnd(0.08, 0.16), 0.3, 0.2, 0, 1, 0.05, SPARK0, SPARK1);
+    }
+  }
+
+  private bulletImpact(pos: Vector3, surface: 'water' | 'ground', t: number): void {
+    const T = this.time;
+    const d = config.fx.density;
+    if (surface === 'water') {
+      const y = waveHeight(pos.x, pos.z, t);
+      for (let i = 0, n = Math.ceil(7 * d); i < n; i++) {
+        this.alpha.emit(T, pos.x + rnd(-0.5, 0.5), y, pos.z + rnd(-0.5, 0.5), rnd(-3, 3), rnd(10, 26), rnd(-3, 3), rnd(0.6, 1.1), 1.4, rnd(3, 5), 22, 0.3, 0, WATER0, WATER1);
+      }
+      for (let i = 0, n = Math.ceil(4 * d); i < n; i++) {
+        this.add.emit(T, pos.x, y + 0.5, pos.z, rnd(-5, 5), rnd(12, 30), rnd(-5, 5), rnd(0.5, 0.9), 0.4, 0.3, 24, 0.2, 0.04, DROP0, DROP1);
+      }
+    } else {
+      for (let i = 0, n = Math.ceil(3 * d); i < n; i++) {
+        this.alpha.emit(T, pos.x, pos.y, pos.z, rnd(-4, 4), rnd(2, 8), rnd(-4, 4), rnd(0.8, 1.4), 1.5, rnd(4, 7), -1, 1, 0, DUST0, DUST1);
+      }
+      for (let i = 0, n = Math.ceil(7 * d); i < n; i++) {
+        this.add.emit(T, pos.x, pos.y, pos.z, rnd(-18, 18), rnd(6, 30), rnd(-18, 18), rnd(0.25, 0.6), 0.4, 0.3, 25, 0.4, 0.05, SPARK0, SPARK1);
+      }
+    }
+  }
+
+  private hitSparks(pos: Vector3, missile: boolean): void {
+    const T = this.time;
+    const v = this.e0;
+    const k = missile ? 1.6 : 1;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.1, 3 * k, 6 * k, 0, 0.1, 0, FLASH0, FLASH1);
+    for (let i = 0, n = Math.ceil(8 * k * config.fx.density); i < n; i++) {
+      this.rsph(v).multiplyScalar(rnd(15, 50));
+      this.add.emit(T, pos.x, pos.y, pos.z, v.x, v.y, v.z, rnd(0.2, 0.55), 0.5, 0.3, 20, 0.5, 0.05, i % 2 ? HOTSPARK0 : SPARK0, SPARK1);
+    }
+  }
+
+  private launchPuff(pos: Vector3): void {
+    const T = this.time;
+    this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.12, 2.5, 5, 0, 0.1, 0, col(4, 3, 1.5, 0.9), col(2, 0.7, 0.2, 0));
+    for (let i = 0, n = Math.ceil(3 * config.fx.density); i < n; i++) {
+      this.alpha.emit(T, pos.x, pos.y, pos.z, rnd(-6, 6), rnd(-8, 2), rnd(-6, 6), rnd(0.5, 0.9), 1.2, rnd(3.5, 5.5), 0, 1.5, 0, VAPOR0, VAPOR1);
+    }
+  }
+
+  private missileBoom(pos: Vector3, surface: 'air' | 'water' | 'ground', t: number): void {
+    const T = this.time;
+    const d = config.fx.density;
+    if (surface === 'air') {
+      this.bigBoom(pos, 0.8);
+      return;
+    }
+    if (surface === 'water') {
+      this.splash(pos.x, pos.z, 90, false, t);
+      this.bigBoom(this.p.set(pos.x, Math.max(pos.y, waveHeight(pos.x, pos.z, t)) + 2, pos.z), 0.5);
+      return;
+    }
+    this.bigBoom(pos, 0.5);
+    for (let i = 0, n = Math.ceil(20 * d); i < n; i++) {
+      const a = rnd(0, Math.PI * 2);
+      const v = rnd(5, 22);
+      this.alpha.emit(T, pos.x, pos.y, pos.z, Math.cos(a) * v, rnd(2, 12), Math.sin(a) * v, rnd(1.6, 2.6), 3, rnd(9, 14), -1, 1.2, 0, DUST0, DUST1);
+    }
   }
 
   // ---- per-frame -----------------------------------------------------------------------------
@@ -498,7 +610,7 @@ export class Fx {
     const kind = this.demoN++ % 4;
     if (kind === 0) this.handle({ type: 'waterEnter', pos: new Vector3(base.x, 0, base.z), speed: 100 }, world);
     else if (kind === 1) this.handle({ type: 'terrainHit', pos: base, normal: new Vector3(0, 1, 0), impact: 40 }, world);
-    else if (kind === 2) this.handle({ type: 'ram', pos: base, dummyId: 0, impact: 70, killed: true }, world);
+    else if (kind === 2) this.handle({ type: 'kill', pos: base, dummyId: 0, by: 'gun', points: 0, chain: 0 }, world);
     else this.handle({ type: 'waterExit', pos: new Vector3(base.x, 0, base.z), speed: 140 }, world);
   }
 }

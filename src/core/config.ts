@@ -294,6 +294,15 @@ export const config = {
     flameGlow: 0.45,
     /** Multiplier on engine flame length. */
     flameLength: 0.75,
+    /** Weapons: tracer length/width (m), missile flare, smoke trail sampling/life/width/alpha. */
+    tracerLength: 55,
+    tracerWidth: 3.2,
+    flareLength: 9,
+    flareWidth: 1,
+    trailInterval: 0.035,
+    trailLife: 2.5,
+    trailWidth: 0.35,
+    trailAlpha: 0.75,
   },
 
   /** Owned by audio/audio.ts. Volumes are linear gains. */
@@ -304,6 +313,10 @@ export const config = {
     boost: 1,
     sfx: 1,
     water: 1,
+    /** Weapons: gun, missile launch whoosh, explosions/hits. */
+    gun: 0.5,
+    missile: 0.6,
+    explosion: 1,
   },
 };
 
