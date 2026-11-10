@@ -10,6 +10,7 @@ interface OverdriveDebugState {
   renderer?: import('three').WebGLRenderer;
   camera?: import('three').PerspectiveCamera;
   post?: import('./render/post').PostState;
+  audio?: import('./audio/audio').GameAudio;
 }
 
 interface Window {

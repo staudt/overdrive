@@ -133,6 +133,6 @@ function frame(now: number): void {
   requestAnimationFrame(frame);
 }
 
-Object.assign(window.__game, { world, input, config, renderer, camera });
+Object.assign(window.__game, { world, input, config, renderer, camera, audio });
 window.__game.ready = true;
 requestAnimationFrame(frame);
