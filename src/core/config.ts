@@ -229,6 +229,16 @@ export const config = {
     /** Multiplier on engine flame length. */
     flameLength: 0.75,
   },
+
+  /** Owned by audio/audio.ts. Volumes are linear gains. */
+  audio: {
+    master: 0.7,
+    engine: 1,
+    wind: 1,
+    boost: 1,
+    sfx: 1,
+    water: 1,
+  },
 };
 
 export type Config = typeof config;

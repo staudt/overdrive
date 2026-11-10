@@ -2,6 +2,7 @@
 import '@fontsource/chakra-petch/500-italic.css';
 import '@fontsource/chakra-petch/700-italic.css';
 import { ACESFilmicToneMapping, Scene, SRGBColorSpace, Vector3, WebGLRenderer } from 'three';
+import { GameAudio } from './audio/audio';
 import { config } from './core/config';
 import { Fx } from './fx/fx';
 import { Input } from './input/input';
@@ -55,6 +56,9 @@ const post = new Post(renderer, scene, camera);
 const hud = new Hud(hudRoot);
 new DebugPanel(config);
 const input = new Input(renderer.domElement);
+const audio = new GameAudio();
+window.addEventListener('pointerdown', () => audio.resume());
+window.addEventListener('keydown', () => audio.resume());
 if (scenario.hold) input.external = scenario.hold;
 
 let damageFlash = 0;
@@ -90,6 +94,7 @@ function frame(now: number): void {
 
   for (const e of world.drainEvents()) {
     fx.handle(e, world);
+    audio.handle(e);
     if (e.type === 'terrainHit') damageFlash = Math.min(1, damageFlash + e.impact / 40);
     if (e.type === 'ram') damageFlash = Math.min(1, damageFlash + 0.25);
   }
@@ -99,6 +104,7 @@ function frame(now: number): void {
   ship.group.position.copy(s.pos);
   ship.group.quaternion.copy(s.quat);
   ship.update(dt, s);
+  audio.update(dt, s);
   dummyView.update(dt, world.dummies);
 
   chase.zoom(input.takeWheel());
