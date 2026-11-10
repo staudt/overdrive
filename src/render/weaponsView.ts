@@ -36,6 +36,7 @@ attribute vec3 aHead;
 attribute vec3 aTail;
 attribute vec4 aHot;   // rgb hot core colour, width
 attribute vec3 aEdge;  // edge colour
+uniform float uWidthPerDist;
 varying vec2 vUv;
 varying vec3 vHot;
 varying vec3 vEdge;
@@ -47,7 +48,8 @@ void main() {
   vec3 side = cross(axis, cameraPosition - p);
   float l = length(side);
   side = l > 1e-5 ? side / l : vec3(0.0, 1.0, 0.0);
-  p += side * position.x * aHot.w * 0.5;
+  float widen = 1.0 + uWidthPerDist * distance(p, cameraPosition) / 100.0;
+  p += side * position.x * aHot.w * 0.5 * widen;
   gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0);
 }
 `;
@@ -99,6 +101,7 @@ class Streaks {
       new ShaderMaterial({
         vertexShader: STREAK_VERT,
         fragmentShader: STREAK_FRAG,
+        uniforms: { uWidthPerDist: U_WIDTH },
         transparent: true,
         depthWrite: false,
         blending: AdditiveBlending,
@@ -148,13 +151,18 @@ class Streaks {
 
 // ---- smoke trails: pooled strips in one dynamic mesh -----------------------------------------------
 
+/** Shared live uniforms, refreshed from config each frame. */
+const U_WIDTH = { value: 0 };
+const U_NEAR = { value: 40 };
+
 const TRAIL_VERT = /* glsl */ `
 attribute float aA;
 attribute vec3 aT; // x: across (-1..1), y: along coord, z: heat
+uniform float uNearFade;
 varying float vA;
 varying vec3 vT;
 void main() {
-  vA = aA; vT = aT;
+  vA = aA * smoothstep(uNearFade * 0.25, uNearFade, distance(position, cameraPosition)); vT = aT;
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
 }
 `;
@@ -245,6 +253,7 @@ class Trails {
       new ShaderMaterial({
         vertexShader: TRAIL_VERT,
         fragmentShader: TRAIL_FRAG,
+        uniforms: { uNearFade: U_NEAR },
         transparent: true,
         depthWrite: false,
         side: DoubleSide,
@@ -444,6 +453,8 @@ export class WeaponsView {
   }
 
   update(dt: number, world: World): void {
+    U_WIDTH.value = config.fx.tracerWidthPerDist;
+    U_NEAR.value = config.fx.trailNearFade;
     this.time += dt;
     this.world = world;
     const now = this.time;

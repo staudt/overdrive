@@ -189,8 +189,8 @@ export const config = {
     /** Muzzle speed added to the ship's velocity, m/s. */
     speed: 1100,
     /** Random cone half-angle (inaccuracy). */
-    spread: 1.3 * DEG,
-    life: 1.0,
+    spread: 1.0 * DEG,
+    life: 1.3,
     damage: 7,
     /** Aim assist: within assistFull of the nose the rounds go exactly to the aim; fades out by assistMax. */
     assistFull: 3 * DEG,
@@ -295,8 +295,14 @@ export const config = {
     /** Multiplier on engine flame length. */
     flameLength: 0.75,
     /** Weapons: tracer length/width (m), missile flare, smoke trail sampling/life/width/alpha. */
-    tracerLength: 55,
-    tracerWidth: 3.2,
+    tracerLength: 80,
+    tracerWidth: 3.6,
+    /** Tracers widen with distance so far streaks stay visible (extra width per 100 m). */
+    tracerWidthPerDist: 0.9,
+    /** Multiplier on explosion size (kills and missile blasts). */
+    explosionScale: 1.5,
+    /** Smoke trails fade out within this distance of the camera, m (keeps launches from whiting out the view). */
+    trailNearFade: 40,
     flareLength: 9,
     flareWidth: 1,
     trailInterval: 0.035,

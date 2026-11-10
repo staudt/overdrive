@@ -321,7 +321,8 @@ export class Fx {
 
 
   /** Orange fireball with black smoke and a shockwave ring. k scales size (1 = drone kill). */
-  private bigBoom(pos: Vector3, k: number): void {
+  private bigBoom(pos: Vector3, k0: number): void {
+    const k = k0 * config.fx.explosionScale;
     const d = config.fx.density * k;
     const T = this.time;
     const v = this.e0;
