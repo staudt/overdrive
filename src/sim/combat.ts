@@ -19,7 +19,7 @@ export function damageDummy(score: ScoreState, u: Dummy, dmg: number, by: HitSou
   if (u.hp > 0) return false;
   u.alive = false;
   score.kills++;
-  points = sc.killPoints + sc.killPerChain * score.chain;
+  points = (u.kind === 'part' ? config.boss.partPoints : sc.killPoints) + sc.killPerChain * score.chain;
   score.score += points;
   events.push({ type: 'kill', pos: u.pos.clone(), dummyId: u.id, by, points, chain: score.chain });
   return true;

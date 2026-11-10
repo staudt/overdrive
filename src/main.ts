@@ -14,6 +14,9 @@ import { createShipModel } from './render/ship/model';
 import { Sky } from './render/sky';
 import { TerrainView } from './render/terrainView';
 import { WeaponsView } from './render/weaponsView';
+import { EnemyBulletsView } from './render/enemyBulletsView';
+import { BossView } from './render/bossView';
+import { BossFx } from './fx/bossFx';
 import { forwardOf } from './sim/flight';
 import { getScenario } from './sim/scenarios';
 import { createTerrain } from './sim/terrainGen';
@@ -41,7 +44,7 @@ app.appendChild(renderer.domElement);
 
 const terrain = createTerrain(config.world.seed);
 const scenario = getScenario(scenarioName, terrain);
-const world = new World(terrain, scenario.world);
+let world = new World(terrain, scenario.world);
 
 const scene = new Scene();
 const chase = new ChaseCamera(window.innerWidth / window.innerHeight);
@@ -54,6 +57,9 @@ scene.add(ship.group);
 const dummyView = new DummyView(scene);
 const fx = new Fx(scene, camera);
 const weaponsView = new WeaponsView(scene, camera);
+const enemyBulletsView = new EnemyBulletsView(scene, camera);
+const bossView = new BossView(scene);
+const bossFx = new BossFx(scene, camera);
 const post = new Post(renderer, scene, camera);
 const hud = new Hud(hudRoot);
 new DebugPanel(config);
@@ -77,6 +83,21 @@ function resize(): void {
 window.addEventListener('resize', resize);
 
 chase.snap(world.ship, world.t);
+
+/** Luftrausers loop: after death, R / Enter (or a click) starts a fresh run. */
+let deadFor = 0;
+function restart(): void {
+  world = new World(terrain, getScenario(scenarioName, terrain).world);
+  window.__game.world = world;
+  deadFor = 0;
+  chase.snap(world.ship, world.t);
+}
+window.addEventListener('keydown', (e) => {
+  if (world.ship.dead && deadFor > 0.8 && (e.code === 'KeyR' || e.code === 'Enter')) restart();
+});
+window.addEventListener('mousedown', () => {
+  if (world.ship.dead && deadFor > 0.8) restart();
+});
 let last = performance.now();
 let acc = 0;
 
@@ -97,11 +118,15 @@ function frame(now: number): void {
   const events = world.drainEvents();
   for (const e of events) {
     fx.handle(e, world);
+    bossFx.handle(e, world);
     audio.handle(e);
     if (e.type === 'terrainHit') damageFlash = Math.min(1, damageFlash + e.impact / 40);
     if (e.type === 'ram') damageFlash = Math.min(1, damageFlash + 0.25);
+    if (e.type === 'playerHit') damageFlash = Math.min(1, damageFlash + 0.35);
+    if (e.type === 'hullHit') damageFlash = Math.min(1, damageFlash + e.impact / 40);
   }
   damageFlash = Math.max(0, damageFlash - dt * 2.5);
+  if (world.ship.dead) deadFor += dt;
 
   const s = world.ship;
   ship.group.position.copy(s.pos);
@@ -110,10 +135,15 @@ function frame(now: number): void {
   audio.update(dt, s);
   dummyView.update(dt, world.dummies);
   weaponsView.update(dt, world);
+  enemyBulletsView.update(dt, world);
+  bossView.update(dt, world);
+  bossFx.update(dt, world);
+  ship.group.visible = !world.ship.dead;
 
   chase.zoom(input.takeWheel());
-  chase.trauma = Math.min(1, chase.trauma + fx.trauma);
+  chase.trauma = Math.min(1, chase.trauma + fx.trauma + bossFx.trauma);
   fx.trauma = 0;
+  bossFx.trauma = 0;
   chase.update(dt, s, world.t);
   const underwater = camera.position.y < waveHeight(camera.position.x, camera.position.z, world.t);
   sky.update(camera, world.t);

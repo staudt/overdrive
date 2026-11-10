@@ -60,6 +60,7 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     diveAim: quat.clone(),
     skimming: false,
     bounceTimer: 0,
+    dead: false,
     altitude: pos.y,
     shield: config.combat.shieldMax,
     shieldDelay: 0,

@@ -33,7 +33,8 @@ const FWD = new Vector3(0, 0, -1);
 
 export interface WeaponsCtx {
   ship: ShipState;
-  dummies: Dummy[];
+  /** Everything hittable: drones plus live boss parts. */
+  targets: Dummy[];
   terrain: Terrain;
   score: ScoreState;
   t: number;
@@ -109,18 +110,18 @@ const _rel = new Vector3();
  * lead point (rounds inherit the ship's velocity, so lead uses the relative velocity).
  * Returns true if a target was taken.
  */
-export function targetAssist(s: ShipState, dummies: Dummy[], from: Vector3, dir: Vector3): boolean {
+export function targetAssist(s: ShipState, targets: Dummy[], from: Vector3, dir: Vector3): boolean {
   const g = config.gun;
   if (g.targetCone <= 0) return false;
   let best: Dummy | undefined;
   let bestAng = g.targetCone;
-  for (const u of dummies) {
+  for (const u of targets) {
     if (!u.alive) continue;
     _rel.subVectors(u.pos, from);
     const dist = _rel.length();
     if (dist > g.targetRange || dist < 1) continue;
     // Bigger drones (up close) are easier to grab: widen the cone by their angular radius.
-    const ang = dir.angleTo(_rel) - Math.atan(config.dummies.radius / dist);
+    const ang = dir.angleTo(_rel) - Math.atan(u.radius / dist);
     if (ang < bestAng) {
       bestAng = ang;
       best = u;
@@ -148,7 +149,7 @@ function fireRound(ws: WeaponState, ctx: WeaponsCtx): void {
   b.pos.set(g.muzzle[0] * ws.gunSide, g.muzzle[1], g.muzzle[2]).applyQuaternion(s.quat).add(s.pos);
   b.prev.copy(b.pos);
   gunDirection(s, _d);
-  const assisted = targetAssist(s, ctx.dummies, b.pos, _d);
+  const assisted = targetAssist(s, ctx.targets, b.pos, _d);
   jitter(_d, g.spread * (assisted ? g.targetSpread : 1), ctx.rng);
   b.vel.copy(s.vel).addScaledVector(_d, g.speed);
   b.life = g.life;
@@ -157,7 +158,7 @@ function fireRound(ws: WeaponState, ctx: WeaponsCtx): void {
 }
 
 function stepBullets(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
-  const r2 = (config.dummies.radius + config.gun.hitBonus) ** 2;
+  const bonus = config.gun.hitBonus;
   for (const b of ws.bullets) {
     if (!b.alive) continue;
     b.prev.copy(b.pos);
@@ -168,9 +169,9 @@ function stepBullets(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
       continue;
     }
     let hit = false;
-    for (const u of ctx.dummies) {
+    for (const u of ctx.targets) {
       if (!u.alive) continue;
-      if (segPointDist2(b.prev, b.pos, u.pos, _p) < r2) {
+      if (segPointDist2(b.prev, b.pos, u.pos, _p) < (u.radius + bonus) ** 2) {
         damageDummy(ctx.score, u, config.gun.damage, 'gun', ctx.events);
         hit = true;
         break;
@@ -193,7 +194,7 @@ function updateLocks(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
   const m = config.missiles;
   forwardOf(ctx.ship.aim, _a);
   const cands: { id: number; ang: number }[] = [];
-  for (const u of ctx.dummies) {
+  for (const u of ctx.targets) {
     if (!u.alive) continue;
     _d.subVectors(u.pos, ctx.ship.pos);
     const dist = _d.length();
@@ -257,9 +258,9 @@ function launchMissile(ws: WeaponState, ctx: WeaponsCtx): void {
 function explode(m: Missile, ctx: WeaponsCtx, at: Vector3, surface: 'air' | 'water' | 'ground'): void {
   const mc = config.missiles;
   m.alive = false;
-  for (const u of ctx.dummies) {
+  for (const u of ctx.targets) {
     if (!u.alive) continue;
-    const d = u.pos.distanceTo(at) - config.dummies.radius;
+    const d = u.pos.distanceTo(at) - u.radius;
     if (d < mc.blastRadius) damageDummy(ctx.score, u, mc.damage * (1 - 0.6 * Math.max(0, d) / mc.blastRadius), 'missile', ctx.events);
   }
   ctx.events.push({ type: 'missileExplode', pos: at.clone(), surface });
@@ -272,7 +273,6 @@ function findDummy(list: Dummy[], id: number): Dummy | undefined {
 
 function stepMissiles(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
   const mc = config.missiles;
-  const rad = config.dummies.radius;
   for (const m of ws.missiles) {
     if (!m.alive) continue;
     m.age += dt;
@@ -285,13 +285,13 @@ function stepMissiles(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
       m.vel.y -= 9.8 * dt;
     } else {
       // Target upkeep: re-acquire through the missile's own seeker if the target is gone.
-      let tgt = m.target >= 0 ? findDummy(ctx.dummies, m.target) : undefined;
+      let tgt = m.target >= 0 ? findDummy(ctx.targets, m.target) : undefined;
       if (!tgt || !tgt.alive) {
         tgt = undefined;
         m.target = -1;
         forwardOf(m.quat, _f);
         let bestAng = SEEKER_CONE;
-        for (const u of ctx.dummies) {
+        for (const u of ctx.targets) {
           if (!u.alive) continue;
           _d.subVectors(u.pos, m.pos);
           if (_d.lengthSq() > SEEKER_RANGE * SEEKER_RANGE) continue;
@@ -335,9 +335,9 @@ function stepMissiles(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
 
     // Proximity fuse / direct hit on any drone along this step.
     let boom = false;
-    for (const u of ctx.dummies) {
+    for (const u of ctx.targets) {
       if (!u.alive) continue;
-      const fuse = u.id === m.target ? mc.proximity + rad : rad;
+      const fuse = u.id === m.target ? mc.proximity + u.radius : u.radius;
       if (segPointDist2(_p, m.pos, u.pos, _a) < fuse * fuse) {
         explode(m, ctx, _a, 'air');
         boom = true;

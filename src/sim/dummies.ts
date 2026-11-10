@@ -13,9 +13,13 @@ const FWD = new Vector3(0, 0, -1);
 const _n = new Vector3();
 const _m = new Vector3();
 
-export function makeDummy(id: number): Dummy {
+export function makeDummy(id: number, kind: Dummy['kind'] = 'drone'): Dummy {
   return {
     id,
+    kind,
+    radius: config.dummies.radius,
+    maxHp: config.dummies.hp,
+    fireTimer: 0,
     pos: new Vector3(),
     vel: new Vector3(),
     quat: new Quaternion(),
@@ -37,8 +41,11 @@ export function placeDummy(u: Dummy, center: Vector3, spread: number, rng: Rng):
   u.vel.set(Math.cos(heading), 0, Math.sin(heading)).multiplyScalar(config.dummies.speed);
   u.quat.setFromUnitVectors(FWD, _n.copy(u.vel).normalize());
   u.hp = config.dummies.hp;
+  u.maxHp = config.dummies.hp;
   u.alive = true;
   u.hitFlash = 99;
+  u.kind = rng() < config.enemyFire.gunnerShare ? 'gunner' : 'drone';
+  u.fireTimer = config.enemyFire.gunnerInterval * (0.5 + rng());
 }
 
 /**
@@ -103,7 +110,7 @@ export function collideDummies(s: ShipState, list: Dummy[], score: ScoreState, e
   let any = false;
   for (const u of list) {
     if (!u.alive) continue;
-    const r = c.shipRadius + config.dummies.radius;
+    const r = c.shipRadius + u.radius;
     _n.subVectors(u.pos, s.pos);
     const dist = _n.length();
     if (dist >= r || dist < 1e-4) continue;

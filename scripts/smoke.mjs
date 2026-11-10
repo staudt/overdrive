@@ -14,7 +14,7 @@ import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { chromium } from 'playwright-core';
 
-const SCENARIOS = ['default', 'low-water', 'canyon-run', 'stall-test', 'dive-test', 'dummies'];
+const SCENARIOS = ['default', 'low-water', 'canyon-run', 'stall-test', 'dive-test', 'dummies', 'boss'];
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith('--')).map((a) => a.split('=')[0]));

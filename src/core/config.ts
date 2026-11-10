@@ -246,6 +246,61 @@ export const config = {
     pylon: [3.4, -0.6, 1.0] as [number, number, number],
   },
 
+  /** Owned by sim/enemyFire.ts: enemy orbs, player damage, grazing. */
+  enemyFire: {
+    /** Player hitbox radius against orbs (smaller than the ship: fair bullet hell), m. */
+    hitRadius: 2.2,
+    /** Orbs passing within this distance count as a graze (score bonus), m. */
+    grazeRadius: 9,
+    grazePoints: 50,
+    /** Shield damage per orb (shieldMax 100). */
+    damage: 14,
+    /** Orbs only live this long, s. */
+    life: 7,
+    /** Gunner drones: aimed bursts. */
+    gunnerShare: 0.3,
+    gunnerRange: 900,
+    gunnerInterval: 2.6,
+    gunnerBurst: 5,
+    gunnerSpeed: 110,
+    gunnerSpread: 4 * DEG,
+  },
+
+  /** Owned by sim/boss.ts. The flying battleship. */
+  boss: {
+    /** Boss arrives on this wave and then every `every` waves. */
+    firstWave: 3,
+    every: 4,
+    length: 420,
+    cruiseSpeed: 28,
+    altitude: 230,
+    /** Circles this far from the point where it arrived, m. */
+    orbitRadius: 900,
+    arriveDistance: 2600,
+    turretHp: 260,
+    engineHp: 420,
+    coreHp: 900,
+    /** Turrets only fire when the player is within this range, m. */
+    range: 1600,
+    /** Base cooldowns (s) per turret kind; divided by (1 + rage * rageFire). */
+    flakInterval: 1.5,
+    spiralInterval: 0.07,
+    ringInterval: 3.2,
+    fanInterval: 2.2,
+    rageFire: 1.2,
+    orbSpeed: 95,
+    flakSpeed: 150,
+    ringCount: 28,
+    fanCount: 11,
+    fanArc: 50 * DEG,
+    /** Hull collision: bounce + damage like terrain. */
+    hullDamagePerMps: 0.6,
+    partPoints: 5000,
+    killPoints: 100000,
+    /** Death sequence duration before the final blast, s. */
+    dyingTime: 4,
+  },
+
   /** Owned by sim/combat.ts. */
   score: {
     /** Hits within this window keep the chain alive, s. */

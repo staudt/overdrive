@@ -5,15 +5,17 @@
 import { Vector3 } from 'three';
 import { config } from '../core/config';
 import { mulberry32, type Rng } from '../core/rng';
+import { bossTargets, createBoss, stepBoss } from './boss';
 import { collideTerrain } from './collision';
 import { createScore, stepScore } from './combat';
 import { collideDummies, spawnWave, stepDummies } from './dummies';
+import { createEnemyFire, stepEnemyBullets, stepGunners, type EnemyFire } from './enemyFire';
 import { createShip, setAim, stepFlight } from './flight';
 import { stepShield } from './shield';
-import type { Dummy, InputFrame, ScoreState, ShipState, SimEvent, Terrain, WeaponState } from './types';
-import { createWeapons, stepWeapons, type WeaponsCtx } from './weapons';
+import type { BossState, Dummy, InputFrame, ScoreState, ShipState, SimEvent, Terrain, WeaponState } from './types';
 import { waveHeight } from './waves';
 import { stepWater } from './water';
+import { createWeapons, stepWeapons, type WeaponsCtx } from './weapons';
 
 const _prev = new Vector3();
 
@@ -26,6 +28,8 @@ export interface WorldOptions {
   dummyCount?: number;
   /** Keep spawning new waves as drones die. Default: true unless dummyCount is given. */
   waves?: boolean;
+  /** Bring the battleship in immediately ('fight' = already on station, guns hot). */
+  boss?: boolean | 'fight';
 }
 
 export class World {
@@ -36,7 +40,11 @@ export class World {
   /** Remaining hit-stop time; the sim freezes while > 0. */
   hitStop = 0;
   readonly weapons: WeaponState = createWeapons();
+  readonly enemyFire: EnemyFire = createEnemyFire();
   readonly score: ScoreState = createScore();
+  boss: BossState | null = null;
+  /** Everything guns/missiles can hit this step: drones + live boss parts. */
+  readonly targets: Dummy[] = [];
   private readonly waves: boolean;
   private waveCount = 0;
   private readonly rng: Rng;
@@ -52,7 +60,19 @@ export class World {
     this.waves = opts.waves ?? opts.dummyCount === undefined;
     const n = opts.dummyCount ?? config.dummies.waveSize;
     if (n > 0) this.startWave(n);
-    this.ctx = { ship: this.ship, dummies: this.dummies, terrain, score: this.score, t: 0, rng: this.rng, events: this.events };
+    if (opts.boss) this.spawnBoss();
+    if (opts.boss === 'fight' && this.boss) {
+      const b = this.boss;
+      b.pos.sub(b.center).setY(0).setLength(config.boss.orbitRadius).add(b.center);
+      b.pos.y = config.boss.altitude;
+      b.stage = 'fight';
+    }
+    this.ctx = { ship: this.ship, targets: this.targets, terrain, score: this.score, t: 0, rng: this.rng, events: this.events };
+  }
+
+  /** Find any target (drone or boss part) by id. */
+  findTarget(id: number): Dummy | undefined {
+    return this.targets.find((u) => u.id === id) ?? this.dummies.find((u) => u.id === id);
   }
 
   private startWave(count: number): void {
@@ -60,6 +80,14 @@ export class World {
     this.waveCount = count;
     const center = spawnWave(this.dummies, this.ship, count, this.rng);
     this.events.push({ type: 'waveStart', wave: this.score.wave, count, center });
+    const b = config.boss;
+    const w = this.score.wave;
+    if (w >= b.firstWave && (w - b.firstWave) % b.every === 0 && (!this.boss || !this.boss.alive)) this.spawnBoss();
+  }
+
+  private spawnBoss(): void {
+    this.boss = createBoss(this.ship, this.rng);
+    this.events.push({ type: 'bossWarning', name: this.boss.name });
   }
 
   private stepWaves(): void {
@@ -68,7 +96,10 @@ export class World {
     for (const u of this.dummies) if (u.alive) alive++;
     if (alive < Math.max(1, Math.ceil(this.waveCount * config.dummies.nextWaveAt))) {
       const d = config.dummies;
-      this.startWave(Math.min(d.maxDummies - alive, d.waveSize + d.waveGrowth * this.score.wave));
+      // While the battleship is up, waves are thinner escorts.
+      const base = d.waveSize + d.waveGrowth * this.score.wave;
+      const size = this.boss?.alive ? Math.ceil(base * 0.4) : base;
+      this.startWave(Math.min(d.maxDummies - alive, size));
     }
   }
 
@@ -79,18 +110,34 @@ export class World {
     }
     const s = this.ship;
     this.t += dt;
-    stepFlight(s, inp, dt, this.events);
-    stepWater(s, dt, this.t, this.events);
-    _prev.copy(s.pos);
-    s.pos.addScaledVector(s.vel, dt);
-    collideTerrain(s, _prev, this.terrain, this.events);
-    stepShield(s, dt);
-    stepDummies(this.dummies, dt, this.t);
     this.ctx.t = this.t;
-    stepWeapons(this.weapons, this.ctx, inp, dt);
-    if (collideDummies(s, this.dummies, this.score, this.events)) this.hitStop = config.combat.hitStop;
+    if (!s.dead) {
+      stepFlight(s, inp, dt, this.events);
+      stepWater(s, dt, this.t, this.events);
+      _prev.copy(s.pos);
+      s.pos.addScaledVector(s.vel, dt);
+      collideTerrain(s, _prev, this.terrain, this.events);
+      stepShield(s, dt);
+    }
+    stepDummies(this.dummies, dt, this.t);
+    if (this.boss?.alive) stepBoss(this.boss, s, this.enemyFire, this.score, this.rng, dt, this.events);
+
+    this.targets.length = 0;
+    for (const u of this.dummies) if (u.alive) this.targets.push(u);
+    bossTargets(this.boss, this.targets);
+
+    stepWeapons(this.weapons, this.ctx, s.dead ? EMPTY : inp, dt);
+    if (!s.dead && collideDummies(s, this.dummies, this.score, this.events)) this.hitStop = config.combat.hitStop;
+    stepGunners(this.enemyFire, this.dummies, s, dt, this.rng, this.events);
+    stepEnemyBullets(this.enemyFire, s, this.terrain, this.score, this.t, dt, this.events);
     stepScore(this.score, dt, this.events);
     this.stepWaves();
+
+    if (!s.dead && s.shield <= 0) {
+      s.dead = true;
+      s.boosting = false;
+      this.events.push({ type: 'playerDeath', pos: s.pos.clone() });
+    }
     const ground = Math.max(this.terrain.heightAt(s.pos.x, s.pos.z), waveHeight(s.pos.x, s.pos.z, this.t));
     s.altitude = s.pos.y - ground;
   }
@@ -99,3 +146,15 @@ export class World {
     return this.events.splice(0, this.events.length);
   }
 }
+
+const EMPTY: InputFrame = {
+  aimDYaw: 0,
+  aimDPitch: 0,
+  throttle: false,
+  brake: false,
+  left: false,
+  right: false,
+  boost: false,
+  fire: false,
+  missile: false,
+};
