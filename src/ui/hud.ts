@@ -7,7 +7,8 @@
  */
 import type { PerspectiveCamera } from 'three';
 import { config } from '../core/config';
-import type { ShipState } from '../sim/types';
+import type { ShipState, SimEvent } from '../sim/types';
+import type { World } from '../sim/world';
 
 const SEGS = 20;
 const GREEN = '#43ff8a';
@@ -248,6 +249,14 @@ export class Hud {
     // Gate first (backdrop), then the flight HUD above it so STALL and the aim marks stay readable.
     this.el.append(gate, left, right, reticle, this.noseNode, stall, under);
   }
+
+  /**
+   * STUB (HUD agent): combat overlay from world.score / world.weapons: score, hi-score, chain,
+   * missile rack, lock brackets (project world.dummies[id].pos with the camera), MISSILE SALVO
+   * banner while world.weapons.streaming, hit marker, kill popups, wave banner. `events` are this
+   * frame's SimEvents (hit, kill, chainEnd, waveStart, ...).
+   */
+  updateCombat(_world: World, _camera: PerspectiveCamera, _events: readonly SimEvent[]): void {}
 
   /** noseScreen: projected nose aim point in NDC (-1..1), or null if behind camera. */
   update(s: ShipState, _camera: PerspectiveCamera, noseScreen: { x: number; y: number } | null, locked: boolean): void {

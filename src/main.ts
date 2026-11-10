@@ -13,6 +13,7 @@ import { Post } from './render/post';
 import { createShipModel } from './render/ship/model';
 import { Sky } from './render/sky';
 import { TerrainView } from './render/terrainView';
+import { WeaponsView } from './render/weaponsView';
 import { forwardOf } from './sim/flight';
 import { getScenario } from './sim/scenarios';
 import { createTerrain } from './sim/terrainGen';
@@ -52,6 +53,7 @@ const ship = createShipModel();
 scene.add(ship.group);
 const dummyView = new DummyView(scene);
 const fx = new Fx(scene, camera);
+const weaponsView = new WeaponsView(scene, camera);
 const post = new Post(renderer, scene, camera);
 const hud = new Hud(hudRoot);
 new DebugPanel(config);
@@ -92,7 +94,8 @@ function frame(now: number): void {
   }
   if (n === config.sim.maxSteps) acc = 0;
 
-  for (const e of world.drainEvents()) {
+  const events = world.drainEvents();
+  for (const e of events) {
     fx.handle(e, world);
     audio.handle(e);
     if (e.type === 'terrainHit') damageFlash = Math.min(1, damageFlash + e.impact / 40);
@@ -106,6 +109,7 @@ function frame(now: number): void {
   ship.update(dt, s);
   audio.update(dt, s);
   dummyView.update(dt, world.dummies);
+  weaponsView.update(dt, world);
 
   chase.zoom(input.takeWheel());
   chase.trauma = Math.min(1, chase.trauma + fx.trauma);
@@ -119,6 +123,7 @@ function frame(now: number): void {
 
   forwardOf(s.quat, _nose).multiplyScalar(600).add(s.pos).project(camera);
   hud.update(s, camera, _nose.z < 1 ? { x: _nose.x, y: _nose.y } : null, input.locked || shotMode);
+  hud.updateCombat(world, camera, events);
 
   const postState = {
     boost: s.boosting ? 1 : 0,
