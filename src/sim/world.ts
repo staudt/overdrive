@@ -66,6 +66,13 @@ export class World {
       b.pos.sub(b.center).setY(0).setLength(config.boss.orbitRadius).add(b.center);
       b.pos.y = config.boss.altitude;
       b.stage = 'fight';
+      // Put the player 550 m off its beam, slightly above, facing it.
+      const side = new Vector3(1, 0, 0).applyQuaternion(b.quat).setY(0).normalize();
+      this.ship.pos.copy(b.pos).addScaledVector(side, 550).add(new Vector3(0, 50, 0));
+      const yaw = Math.atan2(side.x, side.z);
+      this.ship.quat.setFromAxisAngle(new Vector3(0, 1, 0), yaw);
+      this.ship.vel.set(0, 0, -1).applyQuaternion(this.ship.quat).multiplyScalar(config.flight.cruiseSpeed);
+      setAim(this.ship, yaw, -0.08);
     }
     this.ctx = { ship: this.ship, targets: this.targets, terrain, score: this.score, t: 0, rng: this.rng, events: this.events };
   }
