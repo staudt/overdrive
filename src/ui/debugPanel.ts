@@ -127,5 +127,7 @@ export class DebugPanel {
   setVisible(visible: boolean): void {
     this.visible = visible;
     this.gui.show(visible);
+    // Free the mouse so sliders can be used; click the game to fly again.
+    if (visible && document.pointerLockElement) document.exitPointerLock();
   }
 }
