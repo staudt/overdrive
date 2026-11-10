@@ -19,7 +19,7 @@ import { waveHeight } from './waves';
 const BULLET_POOL = 96;
 const MISSILE_POOL = 320;
 const SEEKER_CONE = 40 * (Math.PI / 180);
-const SEEKER_RANGE = 1200;
+const SEEKER_RANGE = 800;
 
 const _f = new Vector3();
 const _a = new Vector3();
@@ -101,6 +101,44 @@ export function gunDirection(s: ShipState, out: Vector3): Vector3 {
   return out;
 }
 
+const _lead = new Vector3();
+const _rel = new Vector3();
+
+/**
+ * Target assist: if a drone sits within targetCone of `dir` (from `from`), turn `dir` onto its
+ * lead point (rounds inherit the ship's velocity, so lead uses the relative velocity).
+ * Returns true if a target was taken.
+ */
+export function targetAssist(s: ShipState, dummies: Dummy[], from: Vector3, dir: Vector3): boolean {
+  const g = config.gun;
+  if (g.targetCone <= 0) return false;
+  let best: Dummy | undefined;
+  let bestAng = g.targetCone;
+  for (const u of dummies) {
+    if (!u.alive) continue;
+    _rel.subVectors(u.pos, from);
+    const dist = _rel.length();
+    if (dist > g.targetRange || dist < 1) continue;
+    // Bigger drones (up close) are easier to grab: widen the cone by their angular radius.
+    const ang = dir.angleTo(_rel) - Math.atan(config.dummies.radius / dist);
+    if (ang < bestAng) {
+      bestAng = ang;
+      best = u;
+    }
+  }
+  if (!best) return false;
+  // Two-step intercept: time of flight from distance, refined once.
+  _rel.subVectors(best.vel, s.vel);
+  let t = best.pos.distanceTo(from) / g.speed;
+  for (let i = 0; i < 2; i++) {
+    _lead.copy(best.pos).addScaledVector(_rel, t);
+    t = _lead.distanceTo(from) / g.speed;
+  }
+  _lead.copy(best.pos).addScaledVector(_rel, t);
+  dir.subVectors(_lead, from).normalize();
+  return true;
+}
+
 function fireRound(ws: WeaponState, ctx: WeaponsCtx): void {
   const g = config.gun;
   const s = ctx.ship;
@@ -109,7 +147,9 @@ function fireRound(ws: WeaponState, ctx: WeaponsCtx): void {
   ws.gunSide = -ws.gunSide;
   b.pos.set(g.muzzle[0] * ws.gunSide, g.muzzle[1], g.muzzle[2]).applyQuaternion(s.quat).add(s.pos);
   b.prev.copy(b.pos);
-  jitter(gunDirection(s, _d), g.spread, ctx.rng);
+  gunDirection(s, _d);
+  const assisted = targetAssist(s, ctx.dummies, b.pos, _d);
+  jitter(_d, g.spread * (assisted ? g.targetSpread : 1), ctx.rng);
   b.vel.copy(s.vel).addScaledVector(_d, g.speed);
   b.life = g.life;
   b.alive = true;
@@ -117,7 +157,7 @@ function fireRound(ws: WeaponState, ctx: WeaponsCtx): void {
 }
 
 function stepBullets(ws: WeaponState, ctx: WeaponsCtx, dt: number): void {
-  const r2 = config.dummies.radius ** 2;
+  const r2 = (config.dummies.radius + config.gun.hitBonus) ** 2;
   for (const b of ws.bullets) {
     if (!b.alive) continue;
     b.prev.copy(b.pos);

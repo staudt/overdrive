@@ -201,8 +201,18 @@ export const config = {
     life: 1.3,
     damage: 7,
     /** Aim assist: within assistFull of the nose the rounds go exactly to the aim; fades out by assistMax. */
-    assistFull: 4 * DEG,
-    assistMax: 8 * DEG,
+    assistFull: 6 * DEG,
+    assistMax: 12 * DEG,
+    /**
+     * Target assist: a drone within targetCone of the firing line (and within targetRange) pulls
+     * the rounds onto its lead point (where it will be when they arrive), with spread scaled by
+     * targetSpread. Set targetCone to 0 to disable.
+     */
+    targetCone: 7 * DEG,
+    targetRange: 1000,
+    targetSpread: 0.6,
+    /** Extra hit radius on drones for rounds, m. */
+    hitBonus: 2,
     /** Barrel offsets in ship space (x is mirrored), m. */
     muzzle: [1.1, -0.2, -6.5] as [number, number, number],
   },
@@ -217,7 +227,7 @@ export const config = {
     refillRate: 9,
     /** Lock-on: cone half-angle around the aim, range, and max simultaneous locks. */
     lockCone: 25 * DEG,
-    lockRange: 1800,
+    lockRange: 700,
     maxLocks: 8,
     /** Launch kick (sideways/down, m/s) and free-fall time before the motor lights, s. */
     ejectSpeed: 22,

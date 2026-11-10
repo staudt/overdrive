@@ -57,6 +57,42 @@ describe('gun', () => {
     expect(w.score.score).toBeGreaterThan(config.score.killPoints);
   });
 
+  it('target assist: a drone crossing a few degrees off the reticle gets hit far more often', () => {
+    const hitRate = (cone: number) => {
+      const saved = config.gun.targetCone;
+      config.gun.targetCone = cone;
+      // Drone 350 m ahead, crossing sideways at 60 m/s.
+      const w = range(1, () => [350 * Math.tan((4 * Math.PI) / 180), 200, -350]);
+      config.dummies.speed = speed0;
+      const u = w.dummies[0]!;
+      u.hp = 1e9;
+      let hits = 0;
+      let shots = 0;
+      const count = () => {
+        for (const e of w.drainEvents()) {
+          if (e.type === 'hit') hits++;
+          if (e.type === 'gunFire') shots++;
+        }
+      };
+      // The pilot tracks the drone but sloppily: the aim stays 4° behind it.
+      const cross = (fire: boolean) => () => {
+        u.vel.set(60, 0, 0);
+        u.home.copy(u.pos);
+        const d = u.pos.clone().sub(w.ship.pos);
+        setAim(w.ship, Math.atan2(-d.x, -d.z) + (4 * Math.PI) / 180, Math.atan2(d.y, Math.hypot(d.x, d.z)));
+        return { fire };
+      };
+      run(w, 1, cross(true), count);
+      run(w, 0.6, cross(false), count); // let the last rounds land
+      config.gun.targetCone = saved;
+      return hits / shots;
+    };
+    const without = hitRate(0);
+    const withAssist = hitRate(config.gun.targetCone);
+    expect(withAssist).toBeGreaterThan(0.6);
+    expect(withAssist).toBeGreaterThan(without * 2);
+  });
+
   it('rounds that miss everything splash into the water', () => {
     const w = new World(flatSea(), { shipPos: v(0, 60, 0), shipYaw: 0, dummyCount: 0 });
     setAim(w.ship, 0, -0.5);
@@ -69,17 +105,23 @@ describe('gun', () => {
 describe('missiles', () => {
   it('locks drones inside the aim cone only, best first, capped at maxLocks', () => {
     // 12 drones in a fan ahead (inside the cone) and 3 behind.
-    const w = range(15, (i) => (i < 12 ? [(i - 6) * 40, 200, -900] : [i * 30, 200, 900]));
+    const w = range(15, (i) => (i < 12 ? [(i - 6) * 35, 200, -550] : [i * 30, 200, 550]));
     run(w, 0.1);
     const locks = w.weapons.locks;
     expect(locks.length).toBe(config.missiles.maxLocks);
     for (const id of locks) expect(id).toBeLessThan(12);
     // Best first: the drone closest to the aim line (x nearest 0) leads.
-    expect(Math.abs(w.dummies[locks[0]!]!.pos.x)).toBeLessThanOrEqual(40);
+    expect(Math.abs(w.dummies[locks[0]!]!.pos.x)).toBeLessThanOrEqual(35);
+  });
+
+  it('does not lock drones beyond lock range (ones you can barely see)', () => {
+    const w = range(2, (i) => (i === 0 ? [0, 200, -(config.missiles.lockRange + 200)] : [0, 200, -400]));
+    run(w, 0.1);
+    expect(w.weapons.locks).toEqual([1]);
   });
 
   it('holding E streams missiles at the stream rate, spreads them over the locks, and kills', () => {
-    const w = range(6, (i) => [(i - 2.5) * 60, 200, -800]);
+    const w = range(6, (i) => [(i - 2.5) * 50, 200, -500]);
     const ev: SimEvent[] = [];
     run(w, 1, { missile: true }, collect(w, ev));
     const launched = ev.filter((e) => e.type === 'missileLaunch').length;
