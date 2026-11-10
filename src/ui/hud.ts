@@ -5,9 +5,9 @@
  * Pure DOM (no canvas). Element refs are cached once and each frame only writes values that
  * changed. Styles are injected once into <head>. Everything is pointer-events: none.
  */
-import { Vector3, type PerspectiveCamera } from 'three';
+import { Quaternion, Vector3, type PerspectiveCamera } from 'three';
 import { config } from '../core/config';
-import type { ShipState, SimEvent } from '../sim/types';
+import type { BossPart, BossState, ShipState, SimEvent } from '../sim/types';
 import type { World } from '../sim/world';
 
 const SEGS = 20;
@@ -140,6 +140,19 @@ const BREAK_MIN = 10;
 const LOCK_MIN_PX = 36;
 const LOCK_MAX_PX = 180;
 const RACK_CELLS = 12;
+const WARN_LIFE = 3;
+const ENGAGE_LIFE = 1.6;
+const EXPOSE_LIFE = 2.5;
+const KBAN_LIFE = 3;
+const WEDGE_LIFE = 0.6;
+const WEDGES = 6;
+const OVER_DELAY = 0.8;
+/** Boss bar damage trail: fraction of the bar per second it drains toward the live value. */
+const TRAIL_RATE = 0.22;
+const MARKERS = 16;
+const EDGE_PAD = 70;
+/** Segment gaps: a dark 3px notch every 13px. */
+const SEG_PAT = 'repeating-linear-gradient(90deg,transparent 0 10px,rgba(6,8,24,.85) 10px 13px)';
 
 const COMBAT_CSS = `
 .hud .panel.top{top:24px;bottom:auto;left:24px;width:min(380px,52vw);--a1:#2ee9ff;--a2:#ff3ccf;padding:10px 18px 12px 20px}
@@ -196,6 +209,68 @@ const COMBAT_CSS = `
 @keyframes brkfade{0%{opacity:0;transform:translate(-50%,-50%) skewX(-10deg) scale(1.4)}10%{opacity:1;transform:translate(-50%,-50%) skewX(-10deg) scale(1)}75%{opacity:1;transform:translate(-50%,-50%) skewX(-10deg) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) skewX(-10deg) scale(1)}}
 `;
 
+const BOSS_CSS = `
+.hud .ol{font-size:13px;font-weight:700;letter-spacing:.18em;opacity:.85}
+.hud .graze{display:none;margin-top:6px;transform-origin:left center;font-size:18px;font-weight:700;letter-spacing:.12em;color:#7dffd0;text-shadow:0 0 8px rgba(67,255,138,.7);white-space:nowrap}
+.hud .graze.on{display:block}
+.hud .graze.pulse{animation:chainpop .22s ease-out}
+.hud .wedge{position:absolute;left:50%;top:50%;width:0;height:0;display:none;transform-origin:0 0}
+.hud .wedge.on{display:block}
+.hud .wedge i{position:absolute;left:150px;top:-70px;width:130px;height:140px;clip-path:polygon(0 35%,100% 0,100% 100%,0 65%);background:linear-gradient(90deg,rgba(255,56,82,.05),rgba(255,56,82,.95))}
+.hud .bossbar{position:absolute;left:50%;top:20px;display:none;width:clamp(300px,calc(100vw - 880px),600px);transform:translateX(-50%) skewX(-10deg);padding:9px 14px 10px;background:linear-gradient(90deg,rgba(24,4,22,.84),rgba(30,6,40,.7));box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.hud .bossbar.on{display:block}
+.hud .bossbar::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,${RED},${MAGENTA})}
+.hud .bhead{display:flex;align-items:baseline;gap:12px;white-space:nowrap}
+.hud .bboss{font-size:14px;font-weight:700;letter-spacing:.22em;color:${RED};text-shadow:0 0 8px rgba(255,56,82,.7)}
+.hud .bname{font-size:20px;font-weight:700;letter-spacing:.1em;color:#fff;text-shadow:0 0 10px rgba(255,60,207,.7)}
+.hud .bwrap{position:relative;height:20px;margin-top:6px;background:rgba(255,255,255,.1);box-shadow:inset 0 0 0 1px rgba(255,120,160,.35)}
+.hud .btrail,.hud .bfill{position:absolute;left:0;top:0;bottom:0;width:0}
+.hud .btrail{background:${SEG_PAT},#f2f7ff}
+.hud .bfill{background:${SEG_PAT},linear-gradient(90deg,${RED},${MAGENTA});box-shadow:0 0 10px rgba(255,56,82,.7)}
+.hud .bpips{display:flex;gap:5px;margin-top:8px;flex-wrap:nowrap}
+.hud .bpip{position:relative;padding:1px 7px;font-size:11px;font-weight:700;letter-spacing:.12em;color:#06101f;background:var(--pc)}
+.hud .bpip.lock{color:var(--pc);background:transparent;box-shadow:inset 0 0 0 1px var(--pc)}
+.hud .bpip.dead{background:rgba(255,255,255,.14);color:#7d6e94;box-shadow:none}
+.hud .bpip.dead::after{content:'';position:absolute;left:-3px;right:-3px;top:50%;height:2px;background:${RED};transform:rotate(-14deg)}
+.hud .bexp{display:none;margin-top:8px;padding:2px 14px;font-size:22px;font-weight:700;letter-spacing:.2em;text-align:center;color:#fff;background:${RED};box-shadow:0 0 16px rgba(255,56,82,.8)}
+.hud .bexp.on{display:block;animation:hudblink .4s linear infinite}
+.hud .bm{position:absolute;left:0;top:0;display:none;width:18px;height:18px}
+.hud .bm.on{display:block}
+.hud .bm i{display:block;width:14px;height:14px;margin:2px;border:2.5px solid var(--mc);box-shadow:0 0 6px var(--mc);transform:rotate(45deg)}
+.hud .bm.t{--mc:${YELLOW}}
+.hud .bm.e{--mc:${MAGENTA}}
+.hud .bm.c{--mc:${RED}}
+.hud .bm.c i{animation:bpulse .6s ease-in-out infinite}
+.hud .barrow{position:absolute;left:0;top:0;display:none;width:28px;height:28px}
+.hud .barrow.on{display:block}
+.hud .barrow svg{position:absolute;left:0;top:0;width:28px;height:28px;overflow:visible;filter:drop-shadow(0 0 6px rgba(255,56,82,.9))}
+.hud .bd{position:absolute;left:50%;top:32px;transform:translateX(-50%) skewX(-10deg);white-space:nowrap;font-size:15px;font-weight:700;letter-spacing:.1em;color:#fff;text-shadow:0 0 6px rgba(0,0,0,.8)}
+.hud .warn{position:absolute;left:50%;top:40%;display:none;flex-direction:column;align-items:center;gap:8px;transform:translate(-50%,-50%) skewX(-10deg);white-space:nowrap}
+.hud .warn.on{display:flex}
+.hud .wstripe{width:min(620px,70vw);height:22px;background:repeating-linear-gradient(-45deg,${YELLOW} 0 14px,#120a00 14px 28px)}
+.hud .warn.on .wstripe,.hud .warn.on .wbig{animation:hudblink .3s linear infinite}
+.hud .wbig{font-size:96px;font-weight:700;line-height:1;letter-spacing:.1em;color:${RED};text-shadow:0 0 18px rgba(255,56,82,.8),4px 4px 0 #3a0010}
+.hud .wsub{padding:4px 16px;font-size:20px;font-weight:700;letter-spacing:.2em;color:#ffe3e8;background:rgba(40,0,12,.75);box-shadow:inset 4px 0 0 ${RED}}
+.hud .engage{position:absolute;left:50%;top:38%;display:none;white-space:nowrap;font-size:120px;font-weight:700;line-height:1;letter-spacing:.1em;color:#43ff8a;text-shadow:0 0 22px rgba(67,255,138,.7),4px 4px 0 #06301a;transform:translate(-50%,-50%) skewX(-10deg)}
+.hud .engage.on{display:block;animation:wavefade ${ENGAGE_LIFE}s ease-out forwards}
+.hud .kban{position:absolute;left:50%;top:34%;display:none;text-align:center;white-space:nowrap;transform:translate(-50%,-50%) skewX(-10deg)}
+.hud .kban.on{display:block;animation:wavefade ${KBAN_LIFE}s ease-out forwards}
+.hud .kt{font-size:64px;font-weight:700;line-height:1;letter-spacing:.08em;color:${YELLOW};text-shadow:0 0 18px rgba(255,210,58,.6),4px 4px 0 ${MAGENTA}}
+.hud .kp{display:inline-block;margin-top:8px;padding:4px 16px;font-size:34px;font-weight:700;letter-spacing:.14em;color:#fff;background:rgba(8,60,120,.75);box-shadow:inset 4px 0 0 ${CYAN}}
+.hud .over{position:absolute;left:50%;top:50%;display:none;width:min(480px,86vw);padding:18px 26px 20px;transform:translate(-50%,-50%) skewX(-10deg);background:linear-gradient(90deg,rgba(18,4,20,.92),rgba(26,8,40,.86));box-shadow:inset 4px 0 0 ${RED},0 16px 40px rgba(0,0,0,.6)}
+.hud .over.on{display:block;animation:overin .6s ease-out forwards}
+.hud .ohead{font-size:46px;font-weight:700;line-height:1;letter-spacing:.06em;white-space:nowrap;color:${RED};text-shadow:0 0 16px rgba(255,56,82,.7)}
+.hud .oscore{font-size:52px;font-weight:700;line-height:1.1;color:${YELLOW};text-shadow:0 0 12px rgba(255,210,58,.5);font-variant-numeric:tabular-nums}
+.hud .ohi{display:none;margin-top:8px;padding:3px 12px;font-size:18px;font-weight:700;letter-spacing:.2em;color:#06101f;background:${YELLOW};box-shadow:0 0 12px rgba(255,210,58,.7)}
+.hud .ohi.on{display:inline-block}
+.hud .orow{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;font-size:18px;border-bottom:1px solid rgba(255,255,255,.1)}
+.hud .orow .ov{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.hud .oretry{margin-top:16px;text-align:center;font-size:20px;font-weight:700;letter-spacing:.22em;color:#fff;animation:txtpulse 1.2s ease-in-out infinite}
+@keyframes overin{from{opacity:0}to{opacity:1}}
+@keyframes txtpulse{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes bpulse{0%,100%{transform:rotate(45deg) scale(1)}50%{transform:rotate(45deg) scale(1.4)}}
+`;
+
 /** Restarts a CSS animation by removing and re-adding its class. */
 function restart(el: HTMLElement, cls: string): void {
   el.classList.remove(cls);
@@ -218,6 +293,280 @@ interface Popup {
   age: number;
   x: number;
   y: number;
+}
+
+interface Wedge {
+  el: HTMLElement;
+  t: number;
+  on: boolean;
+}
+
+interface PipEl {
+  el: HTMLElement;
+  dead: Toggle;
+  lock: Toggle;
+  part: BossPart;
+}
+
+interface MarkerEl {
+  el: HTMLElement;
+  on: Toggle;
+  tf: string;
+}
+
+const PIP_LABEL: Record<BossPart['role'], string> = { turret: 'TUR', engine: 'ENG', core: 'CORE' };
+const PIP_COLOR: Record<BossPart['role'], string> = { turret: YELLOW, engine: MAGENTA, core: RED };
+const MARKER_CLASS: Record<BossPart['role'], string> = { turret: 't', engine: 'e', core: 'c' };
+
+/**
+ * Boss overlay: top-centre health bar with a damage trail and part pips, CORE EXPOSED flash,
+ * diamonds on live parts, an edge arrow with distance when the boss is off screen, and the
+ * WARNING / ENGAGE / TARGET DESTROYED banners. Keyed on world.boss, so it resets with the run.
+ */
+class BossHud {
+  private readonly bar: HTMLElement;
+  private readonly barOn: Toggle;
+  private readonly nameTxt: Txt;
+  private readonly fill: HTMLElement;
+  private readonly trail: HTMLElement;
+  private readonly pips: HTMLElement;
+  private readonly pipList: PipEl[] = [];
+  private readonly expose: HTMLElement;
+  private readonly warn: HTMLElement;
+  private readonly warnName: Txt;
+  private readonly engage: HTMLElement;
+  private readonly kban: HTMLElement;
+  private readonly kbPts: Txt;
+  private readonly markers: MarkerEl[] = [];
+  private readonly arrow: HTMLElement;
+  private readonly arrowIcon: SVGSVGElement;
+  private readonly arrowDist: Txt;
+  private readonly arrowOn: Toggle;
+  private readonly v = new Vector3();
+  private boss: BossState | null = null;
+  private trailFrac = 1;
+  private fillQ = -1;
+  private trailQ = -1;
+  private arrowTf = '';
+  private arrowRot = '';
+  private warnT = 0;
+  private engageT = 0;
+  private exposeT = 0;
+  private kbT = 0;
+
+  constructor(root: HTMLElement) {
+    this.bar = make('div', 'bossbar');
+    this.barOn = new Toggle(this.bar, 'on');
+    const head = make('div', 'bhead');
+    head.append(make('span', 'bboss', 'BOSS'));
+    const nameEl = make('span', 'bname');
+    head.append(nameEl);
+    this.nameTxt = new Txt(nameEl);
+    const wrap = make('div', 'bwrap');
+    this.trail = make('i', 'btrail');
+    this.fill = make('i', 'bfill');
+    wrap.append(this.trail, this.fill);
+    this.pips = make('div', 'bpips');
+    this.expose = make('div', 'bexp', 'CORE EXPOSED');
+    this.bar.append(head, wrap, this.pips, this.expose);
+
+    this.warn = make('div', 'warn');
+    const sub = make('div', 'wsub');
+    this.warn.append(make('div', 'wstripe'), make('div', 'wbig', 'WARNING'), make('div', 'wstripe'), sub);
+    this.warnName = new Txt(sub);
+
+    this.engage = make('div', 'engage', 'ENGAGE');
+
+    this.kban = make('div', 'kban');
+    const kp = make('div', 'kp');
+    this.kban.append(make('div', 'kt', 'TARGET DESTROYED'), kp);
+    this.kbPts = new Txt(kp);
+
+    this.arrow = make('div', 'barrow');
+    this.arrow.innerHTML = `<svg viewBox="0 0 28 28"><path d="M3 4 L24 14 L3 24 L8 14 Z" fill="${RED}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+    this.arrowIcon = this.arrow.querySelector('svg')!;
+    const dist = make('div', 'bd');
+    this.arrow.append(dist);
+    this.arrowDist = new Txt(dist);
+    this.arrowOn = new Toggle(this.arrow, 'on');
+
+    root.append(this.bar, this.warn, this.engage, this.kban, this.arrow);
+    for (let i = 0; i < MARKERS; i++) {
+      const el = make('div', 'bm');
+      el.append(make('i'));
+      root.append(el);
+      this.markers.push({ el, on: new Toggle(el, 'on'), tf: '' });
+    }
+  }
+
+  /** Clears banners and forgets the boss so the next frame re-reads the new run. */
+  reset(): void {
+    this.warnT = 0;
+    this.engageT = 0;
+    this.exposeT = 0;
+    this.kbT = 0;
+    for (const el of [this.warn, this.engage, this.expose, this.kban]) el.classList.remove('on');
+    this.boss = null;
+  }
+
+  update(world: World, camera: PerspectiveCamera, dt: number, events: readonly SimEvent[]): void {
+    for (const e of events) this.handle(e);
+    this.tick(dt);
+    const boss = world.boss;
+    if (boss !== this.boss) this.setBoss(boss);
+    if (!boss || !boss.alive) {
+      this.barOn.set(false);
+      this.hideTargets();
+      return;
+    }
+    this.barOn.set(true);
+    this.updateBar(boss, dt);
+    if (world.ship.dead) {
+      this.hideTargets();
+      return;
+    }
+    this.updateTargets(boss, camera);
+  }
+
+  private handle(e: SimEvent): void {
+    if (e.type === 'bossWarning') {
+      this.warnName.set(e.name);
+      restart(this.warn, 'on');
+      this.warnT = WARN_LIFE;
+    } else if (e.type === 'bossArrive') {
+      restart(this.engage, 'on');
+      this.engageT = ENGAGE_LIFE;
+    } else if (e.type === 'bossPartDestroyed' && e.coreExposed) {
+      restart(this.expose, 'on');
+      this.exposeT = EXPOSE_LIFE;
+    } else if (e.type === 'bossDeath') {
+      this.kbPts.set(`+${fmt(e.points)}`);
+      restart(this.kban, 'on');
+      this.kbT = KBAN_LIFE;
+    }
+  }
+
+  private tick(dt: number): void {
+    if (this.warnT > 0) {
+      this.warnT -= dt;
+      if (this.warnT <= 0) this.warn.classList.remove('on');
+    }
+    if (this.engageT > 0) {
+      this.engageT -= dt;
+      if (this.engageT <= 0) this.engage.classList.remove('on');
+    }
+    if (this.exposeT > 0) {
+      this.exposeT -= dt;
+      if (this.exposeT <= 0) this.expose.classList.remove('on');
+    }
+    if (this.kbT > 0) {
+      this.kbT -= dt;
+      if (this.kbT <= 0) this.kban.classList.remove('on');
+    }
+  }
+
+  private setBoss(boss: BossState | null): void {
+    this.boss = boss;
+    this.trailFrac = 1;
+    this.fillQ = -1;
+    this.trailQ = -1;
+    this.pips.replaceChildren();
+    this.pipList.length = 0;
+    for (const m of this.markers) {
+      m.el.classList.remove('t', 'e', 'c');
+      m.on.set(false);
+    }
+    if (!boss) return;
+    boss.parts.forEach((part, i) => {
+      const el = make('span', 'bpip', PIP_LABEL[part.role]);
+      el.style.setProperty('--pc', PIP_COLOR[part.role]);
+      this.pips.append(el);
+      this.pipList.push({ el, dead: new Toggle(el, 'dead'), lock: new Toggle(el, 'lock'), part });
+      this.markers[i]?.el.classList.add(MARKER_CLASS[part.role]);
+    });
+  }
+
+  private updateBar(boss: BossState, dt: number): void {
+    const frac = boss.maxHp > 0 ? Math.min(1, Math.max(0, boss.hp / boss.maxHp)) : 0;
+    // The white trail keeps the last health and drains toward the live value.
+    this.trailFrac = this.trailFrac > frac ? Math.max(frac, this.trailFrac - TRAIL_RATE * dt) : frac;
+    const fq = Math.round(frac * 1000);
+    if (fq !== this.fillQ) {
+      this.fillQ = fq;
+      this.fill.style.width = `${fq / 10}%`;
+    }
+    const tq = Math.round(this.trailFrac * 1000);
+    if (tq !== this.trailQ) {
+      this.trailQ = tq;
+      this.trail.style.width = `${tq / 10}%`;
+    }
+    this.nameTxt.set(boss.name);
+    const dying = boss.stage === 'dying';
+    for (const p of this.pipList) {
+      const t = p.part.target;
+      const core = p.part.role === 'core';
+      const dead = !t.alive && (!core || t.hp <= 0 || dying);
+      p.dead.set(dead);
+      p.lock.set(core && !t.alive && !dead);
+    }
+  }
+
+  private hideTargets(): void {
+    for (const m of this.markers) m.on.set(false);
+    this.arrowOn.set(false);
+  }
+
+  private updateTargets(boss: BossState, camera: PerspectiveCamera): void {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const dying = boss.stage === 'dying';
+    for (let i = 0; i < this.markers.length; i++) {
+      const m = this.markers[i]!;
+      const part = dying ? undefined : boss.parts[i];
+      let on = false;
+      if (part && part.target.alive) {
+        this.v.copy(part.target.pos).project(camera);
+        if (this.v.z <= 1 && Math.abs(this.v.x) <= 1 && Math.abs(this.v.y) <= 1) {
+          on = true;
+          const tf = `translate(${((this.v.x * 0.5 + 0.5) * vw - 9).toFixed(1)}px,${((-this.v.y * 0.5 + 0.5) * vh - 9).toFixed(1)}px)`;
+          if (tf !== m.tf) {
+            m.tf = tf;
+            m.el.style.transform = tf;
+          }
+        }
+      }
+      m.on.set(on);
+    }
+
+    // Edge arrow when the boss centre is off screen.
+    this.v.copy(boss.pos).project(camera);
+    const behind = this.v.z > 1;
+    const inside = !behind && Math.abs(this.v.x) <= 1 && Math.abs(this.v.y) <= 1;
+    if (dying || inside) {
+      this.arrowOn.set(false);
+      return;
+    }
+    // Behind the camera the projection mirrors, so flip it back to the true side.
+    const nx = behind ? -this.v.x : this.v.x;
+    const ny = behind ? -this.v.y : this.v.y;
+    const sx = (nx * vw) / 2;
+    const sy = (-ny * vh) / 2;
+    const k = Math.min((vw / 2 - EDGE_PAD) / Math.max(Math.abs(sx), 1e-6), (vh / 2 - EDGE_PAD) / Math.max(Math.abs(sy), 1e-6));
+    const ax = vw / 2 + sx * k;
+    const ay = vh / 2 + sy * k;
+    this.arrowOn.set(true);
+    const tf = `translate(${(ax - 14).toFixed(1)}px,${(ay - 14).toFixed(1)}px)`;
+    if (tf !== this.arrowTf) {
+      this.arrowTf = tf;
+      this.arrow.style.transform = tf;
+    }
+    const rot = `rotate(${((Math.atan2(sy, sx) * 180) / Math.PI).toFixed(1)}deg)`;
+    if (rot !== this.arrowRot) {
+      this.arrowRot = rot;
+      this.arrowIcon.style.transform = rot;
+    }
+    this.arrowDist.set(`${fmt(camera.position.distanceTo(boss.pos))} m`);
+  }
 }
 
 /** Combat overlay: score and chain, missile rack, lock brackets, salvo banner, hit marks, popups, waves. */
@@ -247,6 +596,25 @@ class CombatHud {
   private readonly brackets: Bracket[] = [];
   private readonly pops: Popup[] = [];
   private readonly v = new Vector3();
+  private readonly dir = new Vector3();
+  private readonly qInv = new Quaternion();
+  private readonly grazeEl: HTMLElement;
+  private readonly grazeBox: Toggle;
+  private readonly grazeTxt: Txt;
+  private grazes = 0;
+  private readonly wedges: Wedge[] = [];
+  private readonly overOn: Toggle;
+  private readonly overHi: Toggle;
+  private readonly overScore: Txt;
+  private readonly overBest: Txt;
+  private readonly overKills: Txt;
+  private readonly overWave: Txt;
+  private readonly overGrazes: Txt;
+  private readonly bossHud: BossHud;
+  /** The world this run belongs to; a new object means a restart. */
+  private world: World | null = null;
+  private hiAtStart = 0;
+  private deadT = 0;
 
   private lastScore = -1;
   private lastChain = -1;
@@ -291,7 +659,10 @@ class CombatHud {
     const gain = make('div', 'gain');
     this.gainBox = new Toggle(gain, 'on');
     this.gainNum = new Txt(gain);
-    top.append(scoreRow, hiRow, chain, gain);
+    this.grazeEl = make('div', 'graze');
+    this.grazeBox = new Toggle(this.grazeEl, 'on');
+    this.grazeTxt = new Txt(this.grazeEl);
+    top.append(scoreRow, hiRow, chain, this.grazeEl, gain);
 
     // Bottom-right, above BOOST: missile rack.
     const mp = make('div', 'panel panel-r mpanel');
@@ -340,7 +711,37 @@ class CombatHud {
       this.pops.push({ el, on: false, age: 0, x: 0, y: 0 });
     }
 
-    root.append(top, mp, salvo, this.waveEl, hm, this.brkEl);
+    // Damage direction wedges (pooled).
+    for (let i = 0; i < WEDGES; i++) {
+      const el = make('div', 'wedge');
+      el.append(make('i'));
+      this.wedges.push({ el, t: 0, on: false });
+      root.append(el);
+    }
+
+    // Mission failed: results panel, shown ~0.8 s after the shield runs out (see updateDeath).
+    const overEl = make('div', 'over');
+    const hiBadge = make('div', 'ohi', 'NEW HI-SCORE');
+    const oScore = make('div', 'oscore');
+    overEl.append(make('div', 'ohead', 'MISSION FAILED'), make('div', 'ol', 'FINAL SCORE'), oScore, hiBadge);
+    const orow = (label: string): Txt => {
+      const val = make('span', 'ov');
+      const row = make('div', 'orow');
+      row.append(make('span', 'ol', label), val);
+      overEl.append(row);
+      return new Txt(val);
+    };
+    this.overScore = new Txt(oScore);
+    this.overBest = orow('BEST CHAIN');
+    this.overKills = orow('KILLS');
+    this.overWave = orow('WAVE REACHED');
+    this.overGrazes = orow('GRAZES');
+    overEl.append(make('div', 'oretry', 'PRESS R TO RETRY'));
+    this.overOn = new Toggle(overEl, 'on');
+    this.overHi = new Toggle(hiBadge, 'on');
+
+    this.bossHud = new BossHud(root);
+    root.append(top, mp, salvo, this.waveEl, hm, this.brkEl, overEl);
     for (const b of this.brackets) root.append(b.el);
     for (const p of this.pops) root.append(p.el);
 
@@ -360,6 +761,7 @@ class CombatHud {
     const now = performance.now();
     const dt = Math.min(0.1, Math.max(0, (now - this.lastNow) / 1000));
     this.lastNow = now;
+    if (world !== this.world) this.resetRun(world);
 
     for (const e of events) {
       if (e.type === 'hit') {
@@ -377,6 +779,11 @@ class CombatHud {
           restart(this.brkEl, 'on');
           this.breakT = BREAK_LIFE;
         }
+      } else if (e.type === 'playerHit') {
+        this.addWedge(e.pos, camera);
+      } else if (e.type === 'graze') {
+        this.grazes++;
+        restart(this.grazeEl, 'pulse');
       } else if (e.type === 'waveStart') {
         this.waveTitle.set(`WAVE ${e.wave}`);
         this.waveSub.set(`${e.count} HOSTILES`);
@@ -389,6 +796,11 @@ class CombatHud {
     this.updateMissiles(world);
     this.updateLocks(world, camera);
     this.updatePops(dt);
+    this.updateWedges(dt);
+    this.grazeBox.set(this.grazes > 0);
+    this.grazeTxt.set(`GRAZE ×${this.grazes}`);
+    this.updateDeath(world, dt);
+    this.bossHud.update(world, camera, dt, events);
 
     if (this.hitT > 0) {
       this.hitT -= dt;
@@ -405,6 +817,80 @@ class CombatHud {
       this.waveT -= dt;
       if (this.waveT <= 0) this.waveEl.classList.remove('on');
     }
+  }
+
+  /** New world object = new run: clear per-run state (grazes, banners, pops, wedges, boss). */
+  private resetRun(world: World): void {
+    this.world = world;
+    this.hiAtStart = this.hiStored;
+    this.grazes = 0;
+    this.deadT = 0;
+    this.lastScore = -1;
+    this.lastChain = -1;
+    this.gainAcc = 0;
+    this.gainT = 0;
+    this.breakT = 0;
+    this.waveT = 0;
+    this.hitT = 0;
+    this.hitKill = false;
+    this.brkEl.classList.remove('on');
+    this.waveEl.classList.remove('on');
+    for (const p of this.pops) {
+      p.on = false;
+      p.el.classList.remove('on');
+    }
+    for (const w of this.wedges) {
+      w.on = false;
+      w.el.classList.remove('on');
+    }
+    this.overOn.set(false);
+    this.bossHud.reset();
+  }
+
+  /** Damage direction: a wedge at the screen angle of the incoming orb (camera-local x/y). */
+  private addWedge(pos: Vector3, camera: PerspectiveCamera): void {
+    this.dir.copy(pos).sub(camera.position).applyQuaternion(this.qInv.copy(camera.quaternion).invert());
+    const deg = (Math.atan2(-this.dir.y, this.dir.x) * 180) / Math.PI;
+    let slot = this.wedges.find((w) => !w.on);
+    if (!slot) slot = this.wedges.reduce((a, b) => (b.t > a.t ? b : a));
+    slot.on = true;
+    slot.t = 0;
+    slot.el.style.transform = `rotate(${deg.toFixed(1)}deg)`;
+    slot.el.style.opacity = '1';
+    slot.el.classList.add('on');
+  }
+
+  private updateWedges(dt: number): void {
+    for (const w of this.wedges) {
+      if (!w.on) continue;
+      w.t += dt;
+      if (w.t >= WEDGE_LIFE) {
+        w.on = false;
+        w.el.classList.remove('on');
+        continue;
+      }
+      w.el.style.opacity = (1 - w.t / WEDGE_LIFE).toFixed(3);
+    }
+  }
+
+  /** Results panel after the shield runs out; the restart keys (R / Enter / click) are in main.ts. */
+  private updateDeath(world: World, dt: number): void {
+    if (!world.ship.dead) {
+      this.deadT = 0;
+      this.overOn.set(false);
+      return;
+    }
+    this.deadT += dt;
+    const show = this.deadT >= OVER_DELAY;
+    this.overOn.set(show);
+    if (!show) return;
+    const sc = world.score;
+    this.overScore.set(fmt(sc.score));
+    this.overBest.set(`×${fmt(sc.bestChain)}`);
+    this.overKills.set(fmt(sc.kills));
+    this.overWave.set(String(sc.wave));
+    this.overGrazes.set(fmt(this.grazes));
+    this.overHi.set(sc.score > 0 && sc.score > this.hiAtStart);
   }
 
   private updateScore(world: World, now: number, dt: number): void {
@@ -477,12 +963,13 @@ class CombatHud {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const tanHalf = Math.tan((camera.fov * Math.PI) / 360);
-    const worldSize = config.dummies.radius * 3.2;
+    const dead = world.ship.dead;
     for (let i = 0; i < this.brackets.length; i++) {
       const b = this.brackets[i];
       if (!b) continue;
       const id = w.locks[i];
-      const d = id !== undefined ? world.dummies[id] : undefined;
+      // Lock ids are drones or boss parts (ids >= BOSS_PART_ID0): findTarget covers both.
+      const d = id !== undefined && !dead ? world.findTarget(id) : undefined;
       if (!d || !d.alive) {
         this.setBracket(b, false);
         continue;
@@ -495,7 +982,7 @@ class CombatHud {
       this.setBracket(b, true);
 
       const dist = Math.max(1, camera.position.distanceTo(d.pos));
-      const size = Math.round(Math.min(LOCK_MAX_PX, Math.max(LOCK_MIN_PX, (worldSize * vh) / (2 * dist * tanHalf))));
+      const size = Math.round(Math.min(LOCK_MAX_PX, Math.max(LOCK_MIN_PX, (d.radius * 3.2 * vh) / (2 * dist * tanHalf))));
       const age = w.lockAge[i] ?? LOCK_ANIM;
       const p = Math.min(1, Math.max(0, age / LOCK_ANIM));
       const e = 1 - (1 - p) ** 3;
@@ -586,7 +1073,7 @@ export class Hud {
     if (!document.getElementById('hud-style')) {
       const style = make('style');
       style.id = 'hud-style';
-      style.textContent = CSS + COMBAT_CSS;
+      style.textContent = CSS + COMBAT_CSS + BOSS_CSS;
       document.head.appendChild(style);
     }
 
@@ -720,9 +1207,9 @@ export class Hud {
     this.stall.set(s.stalled);
     this.under.set(s.submerged);
     this.gate.set(!locked);
-    this.reticle.set(locked);
+    this.reticle.set(locked && !s.dead);
 
-    if (noseScreen) {
+    if (noseScreen && !s.dead) {
       const px = Math.round((noseScreen.x * 0.5 + 0.5) * window.innerWidth);
       const py = Math.round((-noseScreen.y * 0.5 + 0.5) * window.innerHeight);
       if (px !== this.noseX) {
