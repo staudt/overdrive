@@ -21,6 +21,8 @@ import { DebugPanel } from './ui/debugPanel';
 
 const params = new URLSearchParams(window.location.search);
 const scenarioName = params.get('scenario') ?? 'default';
+/** ?shot: screenshot mode (smoke tests): hides the click-to-fly gate. */
+const shotMode = params.has('shot');
 window.__game = { ready: false, frames: 0, scenario: scenarioName, errors: [] };
 window.addEventListener('error', (e) => window.__game.errors.push(String(e.message)));
 
@@ -107,7 +109,7 @@ function frame(now: number): void {
   fx.update(dt, world, ship);
 
   forwardOf(s.quat, _nose).multiplyScalar(600).add(s.pos).project(camera);
-  hud.update(s, camera, _nose.z < 1 ? { x: _nose.x, y: _nose.y } : null, input.locked);
+  hud.update(s, camera, _nose.z < 1 ? { x: _nose.x, y: _nose.y } : null, input.locked || shotMode);
 
   post.render(dt, {
     boost: s.boosting ? 1 : 0,

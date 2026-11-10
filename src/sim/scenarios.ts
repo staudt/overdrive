@@ -19,8 +19,12 @@ export const scenarios: Record<string, (t: Terrain) => Scenario> = {
     const [a, b] = t.canyonPath;
     const [x0, z0] = a!;
     const [x1, z1] = b!;
-    const y = Math.max(0, t.heightAt(x0, z0)) + 35;
-    return { world: { shipPos: new Vector3(x0, y, z0), shipYaw: yawToward(x0, z0, x1, z1), dummyCount: 0 } };
+    // Start 300 m out to sea before the mouth, lined up with the first canyon leg.
+    const len = Math.hypot(x1 - x0, z1 - z0) || 1;
+    const sx = x0 - ((x1 - x0) / len) * 300;
+    const sz = z0 - ((z1 - z0) / len) * 300;
+    const y = Math.max(0, t.heightAt(sx, sz)) + 30;
+    return { world: { shipPos: new Vector3(sx, y, sz), shipYaw: yawToward(sx, sz, x1, z1), dummyCount: 0 } };
   },
   'stall-test': () => ({ world: { shipPos: new Vector3(0, 300, 600), shipYaw: 0 }, hold: { brake: true } }),
   'dive-test': () => ({ world: { shipPos: new Vector3(0, 90, 600), shipYaw: 0, shipPitch: -0.7, shipSpeed: 90 } }),

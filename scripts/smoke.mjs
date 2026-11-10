@@ -108,7 +108,7 @@ try {
       page.on('pageerror', (e) => errors.push(String(e)));
       const res = { scenario: name, ok: true, problems: [] };
       try {
-        await page.goto(`http://localhost:${PORT}/?scenario=${name}`);
+        await page.goto(`http://localhost:${PORT}/?scenario=${name}&shot`);
         await page.waitForFunction(() => window.__game?.ready === true, null, { timeout: 30000 });
         await page.waitForTimeout(settleMs);
         const state = await page.evaluate(() => window.__game);
