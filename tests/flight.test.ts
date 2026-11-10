@@ -117,7 +117,7 @@ describe('dive mirror bounce', () => {
     const steep = dive(60, 100);
     expect(steep.maxDepth).toBeGreaterThan(shallow.maxDepth * 1.5);
     expect(steep.under).toBeGreaterThan(shallow.under * 1.3);
-    expect(steep.under).toBeGreaterThan(1.2);
+    expect(steep.under).toBeGreaterThan(0.75);
   });
 
   it('a 20° contact is not a dive', () => {

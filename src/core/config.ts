@@ -107,9 +107,9 @@ export const config = {
     depthPerMps: 0.35,
     minDepth: 6,
     maxDepth: 45,
-    timeBase: 0.55,
-    timePerMps: 0.008,
-    timeMax: 2.6,
+    timeBase: 0.37,
+    timePerMps: 0.0053,
+    timeMax: 1.75,
     /** Horizontal velocity drag underwater, 1/s. */
     drag: 0.8,
     exitSpeedMul: 1.0,
