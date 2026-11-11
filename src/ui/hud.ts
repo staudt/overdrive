@@ -60,6 +60,10 @@ const CSS = `
 .hud .card span{align-self:center;opacity:.92}
 .hud .card .warn{color:${RED};font-weight:700}
 @keyframes hudblink{0%,100%{opacity:1}50%{opacity:.15}}
+.hud .area{position:absolute;left:50%;top:22%;display:none;text-align:center;transform:translate(-50%,-50%) skewX(-10deg);white-space:nowrap}
+.hud .area.on{display:block;animation:stallflash .8s linear infinite}
+.hud .area .big{font-size:38px;font-weight:700;letter-spacing:.14em;color:${YELLOW};text-shadow:0 0 14px rgba(255,210,58,.7),3px 3px 0 ${MAGENTA}}
+.hud .area .sub{display:inline-block;margin-top:6px;padding:3px 12px;font-size:16px;font-weight:700;letter-spacing:.24em;color:#fff;background:rgba(5,10,30,.7);box-shadow:inset 3px 0 0 ${YELLOW}}
 @keyframes stallflash{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes hudpulse{0%,100%{transform:skewX(-10deg) scale(1)}50%{transform:skewX(-10deg) scale(1.04)}}
 `;
@@ -1060,6 +1064,7 @@ export class Hud {
   private readonly rechargeTag: Toggle;
   private readonly boostPanel: Toggle;
   private readonly stall: Toggle;
+  private readonly area: Toggle;
   private readonly under: Toggle;
   private readonly gate: Toggle;
   private readonly nose: Toggle;
@@ -1143,6 +1148,9 @@ export class Hud {
     const stall = make('div', 'stall');
     stall.append(make('div', 'big', 'FREE FALL'), make('div', 'sub', 'RELEASE S TO FLY'));
     this.stall = new Toggle(stall, 'on');
+    const area = make('div', 'area');
+    area.append(make('div', 'big', 'LEAVING MISSION AREA'), make('div', 'sub', 'TURN BACK'));
+    this.area = new Toggle(area, 'on');
 
     const under = make('div', 'under', 'UNDERWATER');
     this.under = new Toggle(under, 'on');
@@ -1168,7 +1176,7 @@ export class Hud {
     this.gate = new Toggle(gate, 'on');
 
     // Gate first (backdrop), then the flight HUD above it so STALL and the aim marks stay readable.
-    this.el.append(gate, left, right, reticle, this.noseNode, stall, under);
+    this.el.append(gate, left, right, reticle, this.noseNode, stall, area, under);
 
     // Combat overlay goes on top of the flight HUD.
     this.combat = new CombatHud(this.el);
@@ -1205,6 +1213,7 @@ export class Hud {
     this.boostNum.set(String(Math.round(s.boostMeter * 100)));
 
     this.stall.set(s.stalled);
+    this.area.set(s.areaWarning && !s.dead);
     this.under.set(s.submerged);
     this.gate.set(!locked);
     this.reticle.set(locked && !s.dead);

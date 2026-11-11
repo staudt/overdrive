@@ -30,7 +30,7 @@ export const config = {
     /** Airbrakes: S decelerates this hard, m/s². */
     brakeDecel: 260,
     /** Once stopped with S held, the ship hangs in place this long before free-falling, s. */
-    brakeHoldTime: 1.0,
+    brakeHoldTime: 1.5,
     /** How hard the hold bleeds the last bit of motion, 1/s. */
     brakeHoldDamp: 6,
     /** Diving speeds you up, climbing slows you (fraction of gravity along the nose). */
@@ -83,6 +83,12 @@ export const config = {
     stallTime: 0.3,
     stallRecoverSpeed: 40,
     stallGrip: 0.25,
+    /** Gravity during free fall, m/s² (stronger than the flying gravity: a real drop). */
+    stallGravity: 32,
+    /** Free-fall speed cap, m/s. */
+    stallMaxFall: 170,
+    /** With S still held in free fall, the airbrakes bleed horizontal speed at this rate, 1/s. */
+    stallBrakeDrag: 1.5,
 
     /** Soft ceiling: authority and thrust fade over ceilingSoft meters above ceiling. */
     ceiling: 900,
@@ -319,6 +325,14 @@ export const config = {
     /** Heightfield cell size, m. */
     cell: 4,
     seabed: -60,
+    /** Mission area: a circle around the islands (computed from the terrain) plus this margin, m. */
+    areaMargin: 250,
+    /** Warning starts this far inside the edge when heading outward, m. */
+    areaWarnInset: 200,
+    /** Past the edge, the push-back turn ramps to full over this band, m. */
+    areaSoftBand: 350,
+    /** Max push-back turn rate on the aim, rad/s. */
+    areaTurnRate: 1.8,
   },
 
   /** Owned by render/camera.ts. */

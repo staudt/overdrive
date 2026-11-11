@@ -5,6 +5,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { config } from '../core/config';
 import type { Rng } from '../core/rng';
+import { clampToArea, type MissionArea } from './bounds';
 import { damageDummy } from './combat';
 import type { Dummy, ScoreState, ShipState, SimEvent } from './types';
 
@@ -52,7 +53,7 @@ export function placeDummy(u: Dummy, center: Vector3, spread: number, rng: Rng):
  * Spawn a wave of `count` drones centered `waveDist` ahead of the ship (horizontal heading),
  * reusing dead slots and growing the list up to maxDummies. Returns the wave center.
  */
-export function spawnWave(list: Dummy[], ship: ShipState, count: number, rng: Rng): Vector3 {
+export function spawnWave(list: Dummy[], ship: ShipState, count: number, rng: Rng, area?: MissionArea): Vector3 {
   const d = config.dummies;
   _m.copy(ship.vel).setY(0);
   if (_m.lengthSq() < 1) _m.set(0, 0, -1).applyQuaternion(ship.quat).setY(0);
@@ -60,6 +61,7 @@ export function spawnWave(list: Dummy[], ship: ShipState, count: number, rng: Rn
   _m.normalize();
   const dist = d.waveDistMin + rng() * (d.waveDistMax - d.waveDistMin);
   const center = new Vector3(ship.pos.x + _m.x * dist, 0, ship.pos.z + _m.z * dist);
+  if (area) clampToArea(area, center, 0.75);
   let placed = 0;
   for (const u of list) {
     if (placed >= count) break;

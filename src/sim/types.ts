@@ -74,6 +74,8 @@ export interface ShipState {
   bounceTimer: number;
   /** Shield hit zero: the run is over (ship explodes, sim stops flying it). */
   dead: boolean;
+  /** Near or past the mission-area edge heading out: HUD shows "LEAVING MISSION AREA". */
+  areaWarning: boolean;
   /** Height above ground/water directly below. */
   altitude: number;
   shield: number;

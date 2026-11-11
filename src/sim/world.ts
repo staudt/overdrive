@@ -6,6 +6,7 @@ import { Vector3 } from 'three';
 import { config } from '../core/config';
 import { mulberry32, type Rng } from '../core/rng';
 import { bossTargets, createBoss, stepBoss } from './boss';
+import { missionArea, stepBounds, type MissionArea } from './bounds';
 import { collideTerrain } from './collision';
 import { createScore, stepScore } from './combat';
 import { collideDummies, spawnWave, stepDummies } from './dummies';
@@ -43,6 +44,8 @@ export class World {
   readonly enemyFire: EnemyFire = createEnemyFire();
   readonly score: ScoreState = createScore();
   boss: BossState | null = null;
+  /** Invisible circle around the islands that keeps the action contained. */
+  readonly area: MissionArea;
   /** Everything guns/missiles can hit this step: drones + live boss parts. */
   readonly targets: Dummy[] = [];
   private readonly waves: boolean;
@@ -55,6 +58,7 @@ export class World {
     opts: WorldOptions,
   ) {
     this.rng = mulberry32(config.world.seed + 7);
+    this.area = missionArea(terrain);
     this.ship = createShip(opts.shipPos, opts.shipYaw, opts.shipSpeed);
     if (opts.shipPitch) setAim(this.ship, opts.shipYaw, opts.shipPitch);
     this.waves = opts.waves ?? opts.dummyCount === undefined;
@@ -85,7 +89,7 @@ export class World {
   private startWave(count: number): void {
     this.score.wave++;
     this.waveCount = count;
-    const center = spawnWave(this.dummies, this.ship, count, this.rng);
+    const center = spawnWave(this.dummies, this.ship, count, this.rng, this.area);
     this.events.push({ type: 'waveStart', wave: this.score.wave, count, center });
     const b = config.boss;
     const w = this.score.wave;
@@ -93,7 +97,7 @@ export class World {
   }
 
   private spawnBoss(): void {
-    this.boss = createBoss(this.ship, this.rng);
+    this.boss = createBoss(this.ship, this.rng, this.area);
     this.events.push({ type: 'bossWarning', name: this.boss.name });
   }
 
@@ -120,6 +124,7 @@ export class World {
     this.ctx.t = this.t;
     if (!s.dead) {
       stepFlight(s, inp, dt, this.events);
+      stepBounds(s, this.area, dt);
       stepWater(s, dt, this.t, this.events);
       _prev.copy(s.pos);
       s.pos.addScaledVector(s.vel, dt);

@@ -61,6 +61,7 @@ export function createShip(pos: Vector3, yaw = 0, speed = config.flight.cruiseSp
     skimming: false,
     bounceTimer: 0,
     dead: false,
+    areaWarning: false,
     altitude: pos.y,
     shield: config.combat.shieldMax,
     shieldDelay: 0,
@@ -142,7 +143,8 @@ function stepStall(s: ShipState, inp: InputFrame, dt: number, events: SimEvent[]
   if (!s.stalled && (inp.brake ? s.holdTimer : s.stallTimer) > limit) {
     s.stalled = true;
     events.push({ type: 'stallStart' });
-  } else if (s.stalled && s.vel.dot(forwardOf(s.quat, _dir)) > f.stallRecoverSpeed) {
+  } else if (s.stalled && !inp.brake && s.vel.dot(forwardOf(s.quat, _dir)) > f.stallRecoverSpeed) {
+    // Recovery only once S is released: holding S keeps you dropping.
     s.stalled = false;
     s.stallTimer = 0;
     events.push({ type: 'stallEnd' });
@@ -226,13 +228,21 @@ function stepVelocity(s: ShipState, inp: InputFrame, dt: number): void {
   else _dir.copy(_f);
 
   if (s.stalled && !s.submerged) {
-    // Free fall: ballistic velocity, thrust along the nose unless braking.
-    if (!inp.brake) s.vel.addScaledVector(_f, (s.boosting ? f.boostAccel : f.accel) * dt);
-    _dir.copy(s.vel).normalize();
-    const sp = s.vel.length();
-    _dir.lerp(_f, ease(f.stallGrip, dt)).normalize();
-    s.vel.copy(_dir).multiplyScalar(sp);
-    s.vel.y -= f.gravity * dt;
+    // Free fall. With S held: a straight drop; turning the nose changes nothing about the fall.
+    // Released: thrust along the nose, and the fall bends toward it as the wings bite again.
+    if (inp.brake) {
+      const k = Math.exp(-f.stallBrakeDrag * dt);
+      s.vel.x *= k;
+      s.vel.z *= k;
+    } else {
+      s.vel.addScaledVector(_f, (s.boosting ? f.boostAccel : f.accel) * dt);
+      const sp = s.vel.length();
+      if (sp > 1e-3) {
+        _dir.copy(s.vel).divideScalar(sp).lerp(_f, ease(f.stallGrip, dt)).normalize();
+        s.vel.copy(_dir).multiplyScalar(sp);
+      }
+    }
+    s.vel.y = Math.max(-f.stallMaxFall, s.vel.y - f.stallGravity * dt);
   } else if (!s.submerged) {
     let target = f.cruiseSpeed;
     let up = f.accel;

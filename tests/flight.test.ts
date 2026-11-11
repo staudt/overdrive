@@ -29,7 +29,7 @@ describe('stall', () => {
     expect(w.ship.stalled).toBe(false); // hanging on the airbrakes
     expect(w.ship.speed).toBeLessThan(1.5);
     expect(Math.abs(w.ship.pos.y - y0)).toBeLessThan(1.5);
-    run(w, 0.6, { brake: true });
+    run(w, config.flight.brakeHoldTime, { brake: true });
     expect(w.ship.stalled).toBe(true); // then the free fall
     // Turn 90° while falling: the nose follows the aim, and is not forced down.
     const vy0 = w.ship.vel.y;
@@ -39,6 +39,38 @@ describe('stall', () => {
     expect(Math.abs(f.y)).toBeLessThan(0.1);
     expect(w.ship.vel.y).toBeLessThan(vy0 - 15); // gravity is pulling it down
     expect(w.ship.stalled).toBe(true);
+  });
+
+  it('S held: hang ~1.5 s, then a straight fast drop that turning cannot cancel, until S is released', () => {
+    const w = new World(flatSea(), { shipPos: v(0, 900, 0), shipYaw: 0, dummyCount: 0 });
+    run(w, 0.3, { brake: true }); // stop (the hang clock starts below stallSpeed, ~0.2 s in)
+    const y0 = w.ship.pos.y;
+    run(w, config.flight.brakeHoldTime - 0.4, { brake: true });
+    expect(w.ship.stalled).toBe(false);
+    expect(Math.abs(w.ship.pos.y - y0)).toBeLessThan(2); // hanging still
+    run(w, 0.5, { brake: true });
+    expect(w.ship.stalled).toBe(true);
+    // Fall for 4 s while sweeping the nose around: it never recovers and keeps speeding down.
+    let yaw = 0;
+    let lastVy = w.ship.vel.y;
+    let monotonic = true;
+    const yFall = w.ship.pos.y;
+    run(w, 4, () => {
+      yaw += 2.5 / 120;
+      setAim(w.ship, yaw, 0);
+      return { brake: true };
+    }, () => {
+      if (w.ship.vel.y > lastVy + 1e-6) monotonic = false;
+      lastVy = w.ship.vel.y;
+    });
+    expect(w.ship.stalled).toBe(true);
+    expect(monotonic).toBe(true);
+    expect(yFall - w.ship.pos.y).toBeGreaterThan(200); // a real drop
+    expect(Math.hypot(w.ship.vel.x, w.ship.vel.z)).toBeLessThan(3); // straight down
+    // Release S: flies out of it.
+    setAim(w.ship, yaw, -0.6);
+    run(w, 3, () => (setAim(w.ship, yaw, -0.6), {}));
+    expect(w.ship.stalled).toBe(false);
   });
 
   it('does not stall at cruise', () => {
@@ -231,11 +263,9 @@ describe('turning', () => {
     return speedSum / n / omega;
   };
 
-  it('turn radius: braking < cruise < boost', () => {
-    const brake = radius({ brake: true }, 0.9, 0.5);
+  it('turn radius: cruise < boost (braking is covered by the turn-cap ordering test)', () => {
     const cruise = radius({}, 1, 0.5);
     const boost = radius({ boost: true }, 1.2, 0.4);
-    expect(brake).toBeLessThan(cruise);
     expect(cruise).toBeLessThan(boost);
   });
 

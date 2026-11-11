@@ -8,6 +8,7 @@
 import { Quaternion, Vector3 } from 'three';
 import { config } from '../core/config';
 import type { Rng } from '../core/rng';
+import { clampToArea, type MissionArea } from './bounds';
 import { makeDummy } from './dummies';
 import { aimedBurst, fan, leadDir, ring, spiral, type EnemyFire } from './enemyFire';
 import { damageShield } from './shield';
@@ -39,7 +40,7 @@ const LAYOUT: { role: BossPart['role']; turret?: TurretKind; at: [number, number
   { role: 'core', at: [0, 10, 20] },
 ];
 
-export function createBoss(ship: ShipState, rng: Rng): BossState {
+export function createBoss(ship: ShipState, rng: Rng, area?: MissionArea): BossState {
   const b = config.boss;
   const k = b.length / 420;
   // Orbit center ahead of the player; the ship arrives from further out on a slight angle.
@@ -47,6 +48,8 @@ export function createBoss(ship: ShipState, rng: Rng): BossState {
   if (_d.lengthSq() < 1) _d.set(0, 0, -1).applyQuaternion(ship.quat).setY(0);
   _d.normalize();
   const center = new Vector3(ship.pos.x + _d.x * 900, b.altitude, ship.pos.z + _d.z * 900);
+  // Keep its whole orbit inside the mission area.
+  if (area) clampToArea(area, center, Math.max(0.1, (area.radius - b.orbitRadius - 150) / area.radius));
   const side = rng() < 0.5 ? -1 : 1;
   _a.copy(_d).applyAxisAngle(UP, side * 0.5);
   const pos = center.clone().addScaledVector(_a, b.arriveDistance);
