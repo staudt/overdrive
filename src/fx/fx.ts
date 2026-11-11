@@ -270,9 +270,9 @@ export class Fx {
   private enemyMuzzle(pos: Vector3, kind: string, count: number): void {
     const T = this.time;
     const k = clamp(0.6 + Math.sqrt(count) * 0.35, 0.6, 3);
-    const c0 = kind === 'flak' ? col(6, 3.4, 0.8, 0.95) : kind === 'spiral' ? col(3.5, 1.4, 6, 0.9) : kind === 'gunner' ? col(6, 1.8, 0.5, 0.95) : col(6, 1.2, 3.5, 0.95);
-    const c1 = kind === 'flak' ? col(2, 0.7, 0.1, 0) : kind === 'spiral' ? col(1, 0.3, 2, 0) : kind === 'gunner' ? col(2, 0.3, 0.05, 0) : col(2, 0.2, 1.2, 0);
-    const big = kind === 'ring' || kind === 'flak' ? 1.6 : kind === 'gunner' ? 0.6 : 1;
+    const c0 = kind === 'gatling' ? col(6, 4.2, 1.4, 0.95) : kind === 'flak' ? col(6, 3.4, 0.8, 0.95) : kind === 'spiral' ? col(3.5, 1.4, 6, 0.9) : kind === 'gunner' ? col(6, 1.8, 0.5, 0.95) : col(6, 1.2, 3.5, 0.95);
+    const c1 = kind === 'gatling' ? col(2, 0.8, 0.1, 0) : kind === 'flak' ? col(2, 0.7, 0.1, 0) : kind === 'spiral' ? col(1, 0.3, 2, 0) : kind === 'gunner' ? col(2, 0.3, 0.05, 0) : col(2, 0.2, 1.2, 0);
+    const big = kind === 'ring' || kind === 'flak' ? 1.6 : kind === 'gunner' || kind === 'gatling' ? 0.6 : 1;
     this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.14, 5 * k * big, 11 * k * big, 0, 0.1, 0, c0, c1);
     this.add.emit(T, pos.x, pos.y, pos.z, 0, 0, 0, 0.07, 2 * k * big, 4 * k * big, 0, 0.1, 0, col(7, 6, 6, 1), c1);
   }

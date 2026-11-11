@@ -10,7 +10,7 @@ import { config } from '../core/config';
 import type { Rng } from '../core/rng';
 import { clampToArea, type MissionArea } from './bounds';
 import { makeDummy } from './dummies';
-import { aimedBurst, fan, leadDir, ring, spiral, type EnemyFire } from './enemyFire';
+import { aimedBurst, fan, leadDir, makeSweep, ring, spiral, startSweep, stepSweep, type EnemyFire } from './enemyFire';
 import { damageShield } from './shield';
 import { BOSS_PART_ID0, type BossPart, type BossState, type ScoreState, type ShipState, type SimEvent, type TurretKind } from './types';
 
@@ -29,8 +29,8 @@ const LAYOUT: { role: BossPart['role']; turret?: TurretKind; at: [number, number
   { role: 'turret', turret: 'spiral', at: [0, 32, -75] },
   { role: 'turret', turret: 'ring', at: [0, 30, 15] },
   { role: 'turret', turret: 'fan', at: [0, 27, 105] },
-  { role: 'turret', turret: 'flak', at: [-33, 4, -35] },
-  { role: 'turret', turret: 'flak', at: [33, 4, -35] },
+  { role: 'turret', turret: 'gatling', at: [-33, 4, -35] },
+  { role: 'turret', turret: 'gatling', at: [33, 4, -35] },
   { role: 'turret', turret: 'fan', at: [-33, 4, 70] },
   { role: 'turret', turret: 'fan', at: [33, 4, 70] },
   { role: 'turret', turret: 'spiral', at: [0, -26, 0] },
@@ -112,6 +112,11 @@ function fireTurret(p: BossPart, b: BossState, ship: ShipState, f: EnemyFire, rn
   const c = config.boss;
   const from = p.target.pos;
   const speedUp = 1 + b.rage * c.rageFire;
+  if (p.turret === 'gatling' && p.sweep?.active) {
+    p.aim.lerpVectors(p.sweep.p0, p.sweep.p1, Math.min(1, p.sweep.t / p.sweep.dur)).sub(from).normalize();
+    stepSweep(f, p.sweep, from, 'gatling', rng, dt, events);
+    return;
+  }
   p.cooldown -= dt * speedUp;
   _d.subVectors(ship.pos, from).normalize();
   p.aim.copy(_d);
@@ -137,6 +142,11 @@ function fireTurret(p: BossPart, b: BossState, ship: ShipState, f: EnemyFire, rn
       ring(f, from, _d, UP, Math.round(c.ringCount * (1 + 0.5 * b.rage)), c.orbSpeed * 0.85, 3, 0);
       p.cooldown = c.ringInterval;
       events.push({ type: 'enemyFire', pos: from.clone(), kind: 'ring', count: c.ringCount });
+      break;
+    case 'gatling':
+      p.sweep ??= makeSweep();
+      startSweep(p.sweep, from, ship, rng, events);
+      p.cooldown = c.gatlingInterval * (0.8 + 0.4 * rng());
       break;
     case 'fan':
       leadDir(from, ship.pos, ship.vel, c.orbSpeed * 1.1, _d);

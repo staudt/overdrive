@@ -42,6 +42,7 @@ const KIND_COL: Record<TurretKind, [number, number, number]> = {
   spiral: [2.2, 0.6, 3.8],
   ring: [3.6, 0.4, 2.4],
   fan: [3.8, 0.4, 0.5],
+  gatling: [4, 2.6, 0.8],
 };
 
 function flat(g: BufferGeometry): BufferGeometry {
@@ -454,6 +455,10 @@ export class BossView {
       } else if (kind === 'spiral') {
         for (let i = 0; i < 3; i++) addBarrel(Math.cos(i * 2.094) * 2, 1.5 + Math.sin(i * 2.094) * 1.6, 9);
         head.push(cyl(0, 2, -4, 3.6, 3.6, 3, 8).rotateX(Math.PI / 2));
+      } else if (kind === 'gatling') {
+        // Rotary cannon: six long barrels in a tight ring.
+        for (let i = 0; i < 6; i++) addBarrel(Math.cos(i * 1.047) * 1.1, 1.8 + Math.sin(i * 1.047) * 1.1, 13);
+        head.push(cyl(0, 1.8, -4, 2.4, 2.4, 3.4, 8).rotateX(Math.PI / 2));
       } else if (kind === 'ring') {
         for (let i = -1; i <= 1; i += 2) addBarrel(i * 2.4, 1.8, 6);
         const ringBulb = new SphereGeometry(2.8, 8, 6);

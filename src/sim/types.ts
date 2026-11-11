@@ -112,6 +112,23 @@ export interface Dummy {
   hitFlash: number;
   /** Gunners: seconds until the next burst. */
   fireTimer: number;
+  /** Gunners: machine-gun sweep in progress (see Sweep). */
+  sweep?: Sweep;
+}
+
+/**
+ * A machine-gun barrage that walks a world-fixed line: aim starts ~sweepHalf to one side of
+ * where the player will be, crosses it, and ends past it. The line doesn't track the player:
+ * you read the tracers coming and get off the line.
+ */
+export interface Sweep {
+  active: boolean;
+  p0: Vector3;
+  p1: Vector3;
+  t: number;
+  dur: number;
+  /** Fractional rounds owed (fire-rate accumulator). */
+  acc: number;
 }
 
 /** An enemy orb. Pooled: render only draws `alive` ones. */
@@ -122,13 +139,15 @@ export interface EnemyBullet {
   radius: number;
   life: number;
   alive: boolean;
-  /** Palette index for render: 0 magenta orb, 1 red aimed shot, 2 violet spiral, 3 amber flak. */
+  /** Palette index for render: 0 magenta orb, 1 red aimed shot, 2 violet spiral, 3 amber flak, 4 machine-gun tracer. */
   color: number;
+  /** Shield damage on hit. */
+  damage: number;
   /** Already counted as a graze (near miss) this life. */
   grazed: boolean;
 }
 
-export type TurretKind = 'flak' | 'spiral' | 'ring' | 'fan';
+export type TurretKind = 'flak' | 'spiral' | 'ring' | 'fan' | 'gatling';
 
 export interface BossPart {
   /** The hittable target (pos/hp/alive live here; kind 'part'). */
@@ -141,6 +160,8 @@ export interface BossPart {
   aim: Vector3;
   phase: number;
   cooldown: number;
+  /** Gatling turrets: the sweep in progress. */
+  sweep?: Sweep;
   /** Alive at the previous step (to emit destruction once). */
   wasAlive: boolean;
 }
@@ -256,6 +277,8 @@ export type SimEvent =
   | { type: 'graze'; pos: Vector3; points: number }
   /** Enemy fire, for muzzle flashes / audio. kind: what fired. */
   | { type: 'enemyFire'; pos: Vector3; kind: 'gunner' | TurretKind; count: number }
+  /** A machine-gun sweep begins: p0 → p1 is the line its aim will walk (HUD/FX/audio cue). */
+  | { type: 'sweepStart'; from: Vector3; p0: Vector3; p1: Vector3; duration: number }
   | { type: 'playerDeath'; pos: Vector3 }
   | { type: 'bossWarning'; name: string }
   | { type: 'bossArrive'; name: string }

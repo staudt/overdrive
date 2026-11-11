@@ -270,6 +270,22 @@ export const config = {
     gunnerBurst: 5,
     gunnerSpeed: 110,
     gunnerSpread: 4 * DEG,
+    /**
+     * Machine-gun sweeps (gunners and boss gatling turrets): a tracer stream whose aim walks a
+     * world-fixed line through where the player will be, starting sweepHalf to one side and
+     * ending sweepHalf past it. Read the tracers, get off the line.
+     */
+    /** Share of gunner attacks that are sweeps (the rest are orb bursts). */
+    sweepShare: 0.65,
+    sweepTime: 2.0,
+    sweepRate: 30,
+    sweepSpeed: 420,
+    sweepHalf: 100,
+    sweepSpread: 0.25 * DEG,
+    sweepRadius: 1.1,
+    sweepDamage: 5,
+    /** Chance the sweep runs along the player's own motion (can't escape by flying straight). */
+    sweepAlongShare: 0.6,
   },
 
   /** Owned by sim/boss.ts. The flying battleship. */
@@ -293,6 +309,8 @@ export const config = {
     spiralInterval: 0.07,
     ringInterval: 3.2,
     fanInterval: 2.2,
+    /** Gatling turrets: pause between machine-gun sweeps, s. */
+    gatlingInterval: 2.4,
     rageFire: 1.2,
     orbSpeed: 95,
     flakSpeed: 150,

@@ -57,6 +57,7 @@ export class GameAudio {
   private readonly launchVoices: number[] = [];
   private readonly boomVoices: number[] = [];
   private readonly shipPos = { x: 0, y: 0, z: 0 };
+  private readonly lastEnemyPos = { x: 0, y: 0, z: 0 };
   private prevThrottle = 0;
   private busEnemy!: GainNode;
   private lastEnemy: Record<string, number> = {};
@@ -457,6 +458,9 @@ export class GameAudio {
         this.noiseBurst(this.busBoost, 'lowpass', 3000, 0.7, 0.5, 0.001, 0.12);
         break;
       case 'enemyFire':
+        this.lastEnemyPos.x = e.pos.x;
+        this.lastEnemyPos.y = e.pos.y;
+        this.lastEnemyPos.z = e.pos.z;
         this.enemyShot(e.kind, e.count);
         break;
       case 'playerHit':
@@ -479,9 +483,13 @@ export class GameAudio {
     }
   }
 
+  private distTo(p: { x: number; y: number; z: number }): number {
+    return Math.hypot(p.x - this.shipPos.x, p.y - this.shipPos.y, p.z - this.shipPos.z);
+  }
+
   private enemyShot(kind: string, count: number): void {
     const t = this.ctx!.currentTime;
-    const min = kind === 'spiral' ? 0.07 : 0.05;
+    const min = kind === 'spiral' ? 0.07 : kind === 'gatling' ? 0.04 : 0.05;
     if (t - (this.lastEnemy[kind] ?? -10) < min) return;
     this.lastEnemy[kind] = t;
     const v = config.audio.enemyFire;
@@ -502,6 +510,16 @@ export class GameAudio {
         this.noiseBurst(d, 'lowpass', 400, 0.7, 1.0 * v, 0.05, 0.9, 70, 2, true);
         this.noiseBurst(d, 'bandpass', 700, 0.5, 0.4 * v, 0.1, 0.6, 250);
         break;
+      case 'gatling': {
+        // Enemy machine gun: a darker cousin of the player's gun (low punch, short crack, thump).
+        const dist = this.distTo(this.lastEnemyPos);
+        const g = v * 0.9 / (1 + (dist / 250) * (dist / 250));
+        if (g < 0.02) break;
+        this.noiseBurst(d, 'lowpass', 900 + r * 200, 0.6, 0.9 * g, 0.001, 0.07, 160, 4, true);
+        this.noiseBurst(d, 'bandpass', 1300, 0.5, 0.35 * g, 0.0008, 0.025, 600, 2);
+        this.tone(d, 'sine', 75 + r * 10, 36, 0.6 * g, 0.06, 2);
+        break;
+      }
       case 'fan':
         this.noiseBurst(d, 'bandpass', 250, 1.0, 0.9 * v * k, 0.02, 0.45, 1200);
         this.tone(d, 'sawtooth', 110, 220, 0.12 * v, 0.35, 2);

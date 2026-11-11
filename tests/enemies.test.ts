@@ -59,6 +59,8 @@ describe('enemy orbs', () => {
 
 describe('gunners and death', () => {
   it('gunner drones fire aimed bursts only within range', () => {
+    const share = config.enemyFire.sweepShare;
+    config.enemyFire.sweepShare = 0;
     const w = new World(flatSea(), { shipPos: v(0, 300, 0), shipYaw: 0, dummyCount: 2, waves: false });
     const [near, far] = w.dummies;
     near!.kind = far!.kind = 'gunner';
@@ -70,6 +72,55 @@ describe('gunners and death', () => {
     const fire = ev.filter((e) => e.type === 'enemyFire');
     expect(fire.length).toBe(1);
     expect(fire[0]!.type === 'enemyFire' && fire[0]!.pos.z).toBeCloseTo(-500, -2);
+    config.enemyFire.sweepShare = share;
+  });
+
+  /** A gunner 600 m ahead-left opens a machine-gun sweep on a ship crossing at cruise. */
+  const sweepRun = (dodge: boolean) => {
+    const ef = config.enemyFire;
+    const saved = [ef.sweepShare, ef.sweepAlongShare];
+    ef.sweepShare = 1;
+    ef.sweepAlongShare = 1; // the line runs along the ship's path
+    const w = new World(flatSea(), { shipPos: v(0, 300, 0), shipYaw: -Math.PI / 2, dummyCount: 1, waves: false });
+    const g = w.dummies[0]!;
+    g.kind = 'gunner';
+    g.pos.set(0, 300, -600);
+    g.fireTimer = 0.01;
+    w.ship.shield = 1e9;
+    w.ship.shieldDelay = 1e9;
+    let start: SimEvent | undefined;
+    let hits = 0;
+    let rounds = 0;
+    run(w, 3, () => {
+      g.vel.set(0, 0, 0);
+      g.home.copy(g.pos);
+      // Dodge: once the sweep is called, pull up hard off the line.
+      if (dodge && start) setAim(w.ship, -Math.PI / 2, 1.2);
+      return dodge && start ? { boost: true } : {};
+    }, () => {
+      for (const e of w.drainEvents()) {
+        if (e.type === 'sweepStart' && !start) start = e;
+        if (e.type === 'playerHit') hits++;
+        if (e.type === 'enemyFire') rounds++;
+      }
+    });
+    [ef.sweepShare, ef.sweepAlongShare] = saved;
+    return { start, hits, rounds };
+  };
+
+  it('a machine-gun sweep walks a line from one side of the ship, through it, and past it', () => {
+    const { start, hits, rounds } = sweepRun(false);
+    expect(start).toBeTruthy();
+    if (start?.type !== 'sweepStart') return;
+    expect(start.p0.distanceTo(start.p1)).toBeCloseTo(2 * config.enemyFire.sweepHalf, 0);
+    expect(rounds).toBeGreaterThan(config.enemyFire.sweepRate * config.enemyFire.sweepTime * 0.8);
+    expect(hits).toBeGreaterThan(0); // flying straight along the line gets you hit
+  });
+
+  it('getting off the line once you see the tracers coming avoids most of the sweep', () => {
+    const stay = sweepRun(false);
+    const dodge = sweepRun(true);
+    expect(dodge.hits).toBeLessThan(stay.hits / 2);
   });
 
   it('shield at zero kills the run: ship stops flying, one death event', () => {

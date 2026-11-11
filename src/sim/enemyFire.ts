@@ -8,7 +8,7 @@ import { Vector3 } from 'three';
 import { config } from '../core/config';
 import type { Rng } from '../core/rng';
 import { damageShield } from './shield';
-import type { Dummy, EnemyBullet, ScoreState, ShipState, SimEvent, Terrain } from './types';
+import type { Dummy, EnemyBullet, ScoreState, ShipState, SimEvent, Sweep, Terrain, TurretKind } from './types';
 import { waveHeight } from './waves';
 
 const POOL = 1500;
@@ -19,6 +19,7 @@ const _v = new Vector3();
 const _a = new Vector3();
 const _b = new Vector3();
 const _r = new Vector3();
+const _mid = new Vector3();
 
 export interface EnemyFire {
   bullets: EnemyBullet[];
@@ -29,11 +30,11 @@ export interface EnemyFire {
 export function createEnemyFire(): EnemyFire {
   const bullets: EnemyBullet[] = [];
   for (let i = 0; i < POOL; i++)
-    bullets.push({ pos: new Vector3(), vel: new Vector3(), radius: 2, life: 0, alive: false, color: 0, grazed: false });
+    bullets.push({ pos: new Vector3(), vel: new Vector3(), radius: 2, life: 0, alive: false, color: 0, grazed: false, damage: 0 });
   return { bullets, cursor: 0 };
 }
 
-export function spawnOrb(f: EnemyFire, pos: Vector3, vel: Vector3, radius: number, color: number): void {
+export function spawnOrb(f: EnemyFire, pos: Vector3, vel: Vector3, radius: number, color: number, damage = config.enemyFire.damage): void {
   const n = f.bullets.length;
   let b = f.bullets[f.cursor]!;
   for (let i = 0; i < n && b.alive; i++) {
@@ -48,6 +49,7 @@ export function spawnOrb(f: EnemyFire, pos: Vector3, vel: Vector3, radius: numbe
   b.life = config.enemyFire.life;
   b.alive = true;
   b.grazed = false;
+  b.damage = damage;
 }
 
 /** Orthonormal u, v perpendicular to unit `dir`. */
@@ -111,15 +113,83 @@ export function spiral(f: EnemyFire, from: Vector3, dir: Vector3, arms: number, 
   }
 }
 
-/** Gunner drones: aimed (leading) bursts at the player when in range. */
+export const makeSweep = (): Sweep => ({ active: false, p0: new Vector3(), p1: new Vector3(), t: 0, dur: 1, acc: 0 });
+
+/**
+ * Begin a machine-gun sweep from `from`: the aim will walk a straight, world-fixed line through
+ * the player's predicted position (mid-sweep, including round flight time), from sweepHalf on one
+ * side to sweepHalf past. Usually the line runs along the player's own motion, so flying straight
+ * doesn't escape it; otherwise it crosses it at a random angle.
+ */
+export function startSweep(sw: Sweep, from: Vector3, ship: ShipState, rng: Rng, events: SimEvent[]): void {
+  const ef = config.enemyFire;
+  const flight = from.distanceTo(ship.pos) / ef.sweepSpeed;
+  const mid = _mid.copy(ship.pos).addScaledVector(ship.vel, ef.sweepTime * 0.5 + flight);
+  const los = _d.subVectors(mid, from).normalize();
+  const along = rng() < ef.sweepAlongShare && ship.vel.lengthSq() > 25;
+  if (along) _b.copy(ship.vel).normalize();
+  else _b.set(rng() - 0.5, (rng() - 0.5) * 0.5, rng() - 0.5);
+  _b.addScaledVector(los, -_b.dot(los));
+  if (_b.lengthSq() < 1e-6) basis(los, _b, _v);
+  _b.normalize();
+  // Along the player's path the stream starts behind and overtakes (walks up your tail and past
+  // you); across it, either direction.
+  const sign = along ? 1 : rng() < 0.5 ? -1 : 1;
+  sw.p0.copy(mid).addScaledVector(_b, -sign * ef.sweepHalf);
+  sw.p1.copy(mid).addScaledVector(_b, sign * ef.sweepHalf);
+  sw.t = 0;
+  sw.dur = ef.sweepTime;
+  sw.acc = 1; // first round right away
+  sw.active = true;
+  events.push({ type: 'sweepStart', from: from.clone(), p0: sw.p0.clone(), p1: sw.p1.clone(), duration: sw.dur });
+}
+
+/** Fire the rounds a sweep owes this step. */
+export function stepSweep(f: EnemyFire, sw: Sweep, from: Vector3, kind: 'gunner' | TurretKind, rng: Rng, dt: number, events: SimEvent[]): void {
+  if (!sw.active) return;
+  const ef = config.enemyFire;
+  sw.t += dt;
+  sw.acc += dt * ef.sweepRate;
+  while (sw.acc >= 1) {
+    sw.acc -= 1;
+    const u = Math.min(1, sw.t / sw.dur);
+    _a.lerpVectors(sw.p0, sw.p1, u).sub(from).normalize();
+    jitterDir(_a, ef.sweepSpread, rng);
+    spawnOrb(f, from, _a.multiplyScalar(ef.sweepSpeed), ef.sweepRadius, 4, ef.sweepDamage);
+    events.push({ type: 'enemyFire', pos: from.clone(), kind, count: 1 });
+  }
+  if (sw.t >= sw.dur) sw.active = false;
+}
+
+function jitterDir(dir: Vector3, cone: number, rng: Rng): void {
+  basis(dir, _u, _v);
+  const r = Math.tan(cone * Math.sqrt(rng()));
+  const th = rng() * Math.PI * 2;
+  dir.addScaledVector(_u, Math.cos(th) * r).addScaledVector(_v, Math.sin(th) * r).normalize();
+}
+
+/** Gunner drones: machine-gun sweeps (mostly) or aimed orb bursts, when in range. */
 export function stepGunners(f: EnemyFire, list: Dummy[], ship: ShipState, dt: number, rng: Rng, events: SimEvent[]): void {
   const ef = config.enemyFire;
   for (const u of list) {
-    if (!u.alive || u.kind !== 'gunner') continue;
+    if (!u.alive || u.kind !== 'gunner') {
+      if (u.sweep) u.sweep.active = false;
+      continue;
+    }
+    if (u.sweep?.active) {
+      if (ship.dead) u.sweep.active = false;
+      else stepSweep(f, u.sweep, u.pos, 'gatling', rng, dt, events);
+      continue;
+    }
     u.fireTimer -= dt;
     if (u.fireTimer > 0) continue;
     u.fireTimer = ef.gunnerInterval * (0.8 + 0.4 * rng());
     if (ship.dead || u.pos.distanceTo(ship.pos) > ef.gunnerRange) continue;
+    if (rng() < ef.sweepShare) {
+      u.sweep ??= makeSweep();
+      startSweep(u.sweep, u.pos, ship, rng, events);
+      continue;
+    }
     leadDir(u.pos, ship.pos, ship.vel, ef.gunnerSpeed, _d);
     aimedBurst(f, u.pos, _d, ef.gunnerBurst, ef.gunnerSpread, ef.gunnerSpeed, 2, 1, rng);
     events.push({ type: 'enemyFire', pos: u.pos.clone(), kind: 'gunner', count: ef.gunnerBurst });
@@ -163,8 +233,8 @@ export function stepEnemyBullets(
       const hit = ef.hitRadius + b.radius * 0.5;
       if (d2 < hit * hit) {
         b.alive = false;
-        damageShield(ship, ef.damage);
-        events.push({ type: 'playerHit', pos: b.pos.clone(), damage: ef.damage });
+        damageShield(ship, b.damage);
+        events.push({ type: 'playerHit', pos: b.pos.clone(), damage: b.damage });
         continue;
       }
       if (!b.grazed && d2 < ef.grazeRadius * ef.grazeRadius) {

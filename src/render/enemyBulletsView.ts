@@ -37,7 +37,8 @@ void main() {
   vec3 col = ci < 0.5 ? vec3(1.0, 0.12, 0.62)
            : ci < 1.5 ? vec3(1.0, 0.1, 0.08)
            : ci < 2.5 ? vec3(0.5, 0.22, 1.0)
-                      : vec3(1.0, 0.55, 0.08);
+           : ci < 3.5 ? vec3(1.0, 0.55, 0.08)
+                      : vec3(1.6, 1.05, 0.35);
   vCol = col;
   vec4 mv = viewMatrix * vec4(aPos.xyz, 1.0);
   float dist = length(mv.xyz);
@@ -56,7 +57,8 @@ void main() {
   float proj = length(vv.xy) / sp;
   vec2 along = length(vv.xy) > 0.001 ? normalize(vv.xy) : vec2(1.0, 0.0);
   vec2 perp = vec2(-along.y, along.x);
-  float tail = min(sp * 0.07, R * 3.0) * proj;
+  // Machine-gun tracers (ci 4) get long streaks like the player's, so a sweep reads as a line.
+  float tail = (ci > 3.5 ? min(sp * 0.09, R * 16.0) : min(sp * 0.07, R * 3.0)) * proj;
   vTail = tail / R;
   float head = R * st;
   float lx = mix(-(head + tail), head, position.x * 0.5 + 0.5);
@@ -92,7 +94,7 @@ void main() {
   float behind = max(-vP.x / vSt - ro * 0.5, 0.0);
   float len = max(vTail, 0.01);
   float sw = exp(-pow(vP.y / (ro * 0.55), 2.0)) * clamp(1.0 - behind / len, 0.0, 1.0) * step(0.0, -vP.x);
-  sw *= 0.8 * smoothstep(0.0, 0.4, vTail);
+  sw *= (vTail > 4.0 ? 1.6 : 0.8) * smoothstep(0.0, 0.4, vTail);
   // Compose premultiplied: dark outline, halo/streak additive, body opaque on top.
   vec3 rgb = vec3(0.02, 0.0, 0.05) * outline * 0.6;
   float a = outline * 0.45;
